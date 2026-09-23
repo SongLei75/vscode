@@ -311,6 +311,7 @@ export function fromGithub({ name, version, repo, sha256, metadata }: IExtension
  * platform that is being built.
  */
 const nativeExtensions = [
+	'boardsession',
 	'git',
 	'microsoft-authentication',
 ];

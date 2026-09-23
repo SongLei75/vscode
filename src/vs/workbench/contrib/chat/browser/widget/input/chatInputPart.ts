@@ -3424,7 +3424,10 @@ export class ChatInputPart extends Disposable implements IHistoryNavigationWidge
 			},
 		}));
 		this.executeToolbar.getElement().classList.add('chat-execute-toolbar');
-		this.executeToolbar.context = { widget } satisfies IChatExecuteActionContext;
+		// Native actions use the widget; extension-contributed actions receive a serializable session reference.
+		this.executeToolbar.context = Object.assign({ widget } satisfies IChatExecuteActionContext, {
+			toJSON: () => ({ sessionResource: widget.viewModel?.sessionResource.toString() })
+		});
 		// The lone dictation / Voice Mode control drops its circular border and
 		// only regains it when both share the row (see the matching rules in
 		// chat.css). Count the voice-input actions from the toolbar's action

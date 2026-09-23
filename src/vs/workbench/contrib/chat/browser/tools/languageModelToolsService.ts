@@ -368,12 +368,32 @@ export class LanguageModelToolsService extends Disposable implements ILanguageMo
 		);
 	}
 
+	private getReplacement(id: string): IToolData | undefined {
+		// Fail closed even if replacement tools have been disabled in settings.
+		for (const { data } of this._tools.values()) {
+			if (data.id !== id && data.replaces?.includes(id) && this._contextKeyService.contextMatchesRules(data.when)) {
+				return data;
+			}
+		}
+		return undefined;
+	}
+
+	private assertNotReplaced(id: string): void {
+		const replacement = this.getReplacement(id);
+		if (replacement) {
+			throw new Error(localize('toolReplaced', "Tool {0} is unavailable in the selected execution environment. Use {1} instead.", id, replacement.id));
+		}
+	}
+
 	getTools(model: ILanguageModelChatMetadata | undefined): Iterable<IToolData> {
 		const toolDatas = Iterable.map(this._tools.values(), i => i.data);
 		const extensionToolsEnabled = this._configurationService.getValue<boolean>(ChatConfiguration.ExtensionToolsEnabled);
 		return Iterable.filter(
 			toolDatas,
 			toolData => {
+				if (this.getReplacement(toolData.id)) {
+					return false;
+				}
 				const satisfiesWhenClause = !toolData.when || this._contextKeyService.contextMatchesRules(toolData.when);
 				const satisfiesExternalToolCheck = toolData.source.type !== 'extension' || !!extensionToolsEnabled;
 				const satisfiesPermittedCheck = this.isPermitted(toolData);
@@ -599,6 +619,7 @@ export class LanguageModelToolsService extends Disposable implements ILanguageMo
 		let invocationTimeWatch: StopWatch | undefined;
 		let preparedInvocation: IPreparedToolInvocation | undefined;
 		try {
+			this.assertNotReplaced(dto.toolId);
 			if (dto.context) {
 				if (!model) {
 					throw new Error(`Tool called for unknown chat session`);
@@ -722,7 +743,13 @@ export class LanguageModelToolsService extends Disposable implements ILanguageMo
 			}
 
 			invocationTimeWatch = StopWatch.create(true);
-			toolResult = await tool.impl.invoke(dto, countTokens, {
+			// Recheck after asynchronous preparation and confirmation: the environment may have changed.
+			this.assertNotReplaced(dto.toolId);
+			const currentTool = this._tools.get(dto.toolId);
+			if (!currentTool?.impl) {
+				throw new Error(`Tool ${dto.toolId} does not have an implementation registered.`);
+			}
+			toolResult = await currentTool.impl.invoke(dto, countTokens, {
 				report: step => {
 					toolInvocation?.acceptProgress(step);
 				}

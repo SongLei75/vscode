@@ -48,6 +48,8 @@ export interface IToolData {
 	readonly legacyToolReferenceFullNames?: readonly string[];
 	readonly icon?: { dark: URI; light?: URI } | ThemeIcon;
 	readonly when?: ContextKeyExpression;
+	/** Tool IDs disabled while this replacement's when clause matches, including direct invocations. */
+	readonly replaces?: readonly string[];
 	readonly tags?: readonly string[];
 	readonly displayName: string;
 	readonly userDescription?: string;

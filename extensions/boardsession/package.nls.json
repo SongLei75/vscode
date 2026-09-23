@@ -1,0 +1,15 @@
+{
+  "command.toggle": "Connect or Activate Board Terminal",
+  "command.deactivate": "Deactivate Board Terminal",
+  "command.disconnect": "Disconnect Board Terminal",
+  "command.cancel": "Cancel Board Connection",
+  "board_terminal_run.displayName": "Run Command on Board",
+  "board_terminal_run.userDescription": "Run Command on Board on the connected remote board",
+  "board_terminal_send.displayName": "Send Input to Board",
+  "board_terminal_send.userDescription": "Send Input to Board on the connected remote board",
+  "board_terminal_output.displayName": "Read Board Terminal Output",
+  "board_terminal_output.userDescription": "Read Board Terminal Output on the connected remote board",
+  "board_terminal_kill.displayName": "Close Board Terminal",
+  "board_terminal_kill.userDescription": "Close Board Terminal on the connected remote board",
+  "command.disconnected": "Board Disconnected: Deactivate Board Mode"
+}

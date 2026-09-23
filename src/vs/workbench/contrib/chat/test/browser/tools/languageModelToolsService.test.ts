@@ -398,6 +398,40 @@ suite('LanguageModelToolsService', () => {
 		assert.strictEqual(service.getTool('testTool')?.id, 'testTool');
 	});
 
+	test('replacement tools switch discovery and block direct invocation', async () => {
+		const selected = contextKeyService.createKey<boolean>('alternateEnvironment', false);
+		let calls = 0;
+		const local = registerToolForTest(service, store, 'localExecution', {
+			invoke: async () => { calls++; return { content: [] }; }
+		});
+		registerToolForTest(service, store, 'alternateExecution', {
+			invoke: async () => ({ content: [] })
+		}, { when: ContextKeyExpr.has('alternateEnvironment'), replaces: ['localExecution'] });
+		const visible = () => Array.from(service.getTools(undefined), tool => tool.id);
+		assert.deepStrictEqual(visible(), ['localExecution']);
+		selected.set(true);
+		assert.deepStrictEqual(visible(), ['alternateExecution']);
+		await assert.rejects(service.invokeTool(local.makeDto({}), async () => 0, CancellationToken.None), /alternateExecution/);
+		assert.strictEqual(calls, 0);
+		selected.set(false);
+		await service.invokeTool(local.makeDto({}), async () => 0, CancellationToken.None);
+		assert.deepStrictEqual({ visible: visible(), calls }, { visible: ['localExecution'], calls: 1 });
+	});
+
+	test('replacement tools recheck the environment after preparation', async () => {
+		const selected = contextKeyService.createKey<boolean>('alternateEnvironment', false);
+		let calls = 0;
+		const local = registerToolForTest(service, store, 'localExecution', {
+			prepareToolInvocation: async () => { selected.set(true); return undefined; },
+			invoke: async () => { calls++; return { content: [] }; }
+		});
+		registerToolForTest(service, store, 'alternateExecution', {
+			invoke: async () => ({ content: [] })
+		}, { when: ContextKeyExpr.has('alternateEnvironment'), replaces: ['localExecution'] });
+		await assert.rejects(service.invokeTool(local.makeDto({}), async () => 0, CancellationToken.None), /alternateExecution/);
+		assert.strictEqual(calls, 0);
+	});
+
 	test('getTools', () => {
 		contextKeyService.createKey('testKey', true);
 		const toolData1: IToolData = {

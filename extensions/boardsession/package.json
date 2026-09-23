@@ -1,0 +1,220 @@
+{
+  "name": "boardsession",
+  "displayName": "BoardSession",
+  "description": "Switch Copilot Chat terminal tools between the local environment and a BoardSession SSH session.",
+  "version": "0.1.0",
+  "publisher": "carizon",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "engines": {
+    "vscode": "^1.140.0"
+  },
+  "extensionKind": [
+    "ui"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "scripts": {
+    "prepare:core": "node scripts/prepare-core.mjs",
+    "compile": "node esbuild.mts",
+    "build:board-session": "npm --prefix board-session run build",
+    "pack:board-session": "npm run prepare:core"
+  },
+  "dependencies": {
+    "@carizon/board-session": "file:./packages/carizon-board-session-0.1.0.tgz"
+  },
+  "capabilities": {
+    "virtualWorkspaces": false,
+    "untrustedWorkspaces": {
+      "supported": false
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.6"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "boardsession.toggle",
+        "title": "%command.toggle%",
+        "icon": "$(plug)",
+        "category": "BoardSession",
+        "enablement": "!boardsession.connecting",
+        "toggled": {
+          "condition": "boardsession.active && boardsession.connected",
+          "title": "%command.deactivate%"
+        }
+      },
+      {
+        "command": "boardsession.disconnect",
+        "title": "%command.disconnect%",
+        "category": "BoardSession"
+      },
+      {
+        "command": "boardsession.cancel",
+        "title": "%command.cancel%",
+        "icon": "$(loading~spin)",
+        "category": "BoardSession"
+      },
+      {
+        "command": "boardsession.deactivate",
+        "title": "%command.disconnected%",
+        "icon": "$(debug-disconnect)",
+        "category": "BoardSession"
+      }
+    ],
+    "menus": {
+      "chat/input/actions": [
+        {
+          "command": "boardsession.toggle",
+          "when": "isLinux && !boardsession.connecting && (!boardsession.active || boardsession.connected)",
+          "group": "navigation@-12"
+        },
+        {
+          "command": "boardsession.cancel",
+          "when": "boardsession.connecting",
+          "group": "navigation@-12"
+        },
+        {
+          "command": "boardsession.deactivate",
+          "when": "boardsession.active && !boardsession.connected && !boardsession.connecting",
+          "group": "navigation@-12"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "boardsession.cancel",
+          "when": "boardsession.connecting"
+        },
+        {
+          "command": "boardsession.deactivate",
+          "when": "boardsession.active"
+        }
+      ]
+    },
+    "languageModelTools": [
+      {
+        "when": "boardsession.active",
+        "icon": "$(terminal)",
+        "tags": [
+          "terminal",
+          "execute"
+        ],
+        "name": "board_terminal_run",
+        "displayName": "%board_terminal_run.displayName%",
+        "userDescription": "%board_terminal_run.userDescription%",
+        "modelDescription": "Execute a command in the persistent shell of the connected remote board. NEVER run a local terminal tool when board mode is active. The returned id is board; completed false means the command is still running. Use board_terminal_send for interactive input and board_terminal_output to retrieve output; do not launch another run while one is active.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "command": {
+              "type": "string",
+              "description": "Shell command to execute on remote board"
+            },
+            "timeoutMs": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647,
+              "description": "Wait before returning incomplete; does not cancel remote command"
+            }
+          },
+          "required": [
+            "command"
+          ],
+          "additionalProperties": false
+        },
+        "replaces": [
+          "run_in_terminal",
+          "execution_subagent",
+          "create_and_run_task",
+          "run_task",
+          "vscode_get_terminal_confirmation"
+        ]
+      },
+      {
+        "when": "boardsession.active",
+        "icon": "$(terminal)",
+        "tags": [
+          "terminal",
+          "execute"
+        ],
+        "name": "board_terminal_send",
+        "displayName": "%board_terminal_send.displayName%",
+        "userDescription": "%board_terminal_send.userDescription%",
+        "modelDescription": "Send input to the active board shell, including interactive input while board_terminal_run is pending or timed out. The input is sent to the remote board, not the local terminal.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "command": {
+              "type": "string",
+              "description": "Input text for the remote board shell"
+            },
+            "appendNewline": {
+              "type": "boolean",
+              "description": "Append Enter; default true"
+            }
+          },
+          "required": [
+            "command"
+          ],
+          "additionalProperties": false
+        },
+        "replaces": [
+          "send_to_terminal"
+        ]
+      },
+      {
+        "when": "boardsession.active",
+        "icon": "$(terminal)",
+        "tags": [
+          "terminal",
+          "execute"
+        ],
+        "name": "board_terminal_output",
+        "displayName": "%board_terminal_output.displayName%",
+        "userDescription": "%board_terminal_output.userDescription%",
+        "modelDescription": "Read and consume unread output from the connected remote board terminal.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "replaces": [
+          "get_terminal_output",
+          "terminal_selection",
+          "terminal_last_command",
+          "get_task_output"
+        ]
+      },
+      {
+        "when": "boardsession.active",
+        "icon": "$(terminal)",
+        "tags": [
+          "terminal",
+          "execute"
+        ],
+        "name": "board_terminal_kill",
+        "displayName": "%board_terminal_kill.displayName%",
+        "userDescription": "%board_terminal_kill.userDescription%",
+        "modelDescription": "Close the remote board session. Board mode remains selected to prevent accidental local execution. Use the connection button to reconnect or explicitly deactivate board mode.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "replaces": [
+          "kill_terminal"
+        ]
+      }
+    ]
+  },
+  "allowScripts": {
+    "ssh2": false,
+    "cpu-features": false
+  }
+}

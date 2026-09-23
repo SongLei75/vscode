@@ -1,0 +1,9 @@
+src/**
+out/**
+scripts/**
+packages/**
+board-session/**
+node_modules/**
+esbuild.mts
+tsconfig.json
+**/*.tsbuildinfo

@@ -33,6 +33,7 @@ export interface IRawToolContribution {
 	legacyToolReferenceFullNames?: string[];
 	icon?: string | { light: string; dark: string };
 	when?: string;
+	replaces?: string[];
 	tags?: string[];
 	userDescription?: string;
 	inputSchema?: IJSONSchema;
@@ -123,6 +124,12 @@ const languageModelToolsExtensionPoint = extensionsRegistry.ExtensionsRegistry.r
 				when: {
 					markdownDescription: localize('condition', "Condition which must be true for this tool to be enabled. Note that a tool may still be invoked by another extension even when its `when` condition is false."),
 					type: 'string'
+				},
+				replaces: {
+					description: localize('toolReplaces', "Tool IDs to hide and prevent from executing while this tool's when condition matches. Intended for mutually exclusive execution environments."),
+					type: 'array',
+					items: { type: 'string' },
+					uniqueItems: true
 				},
 				tags: {
 					description: localize('toolTags', "A set of tags that roughly describe the tool's capabilities. A tool user may use these to filter the set of tools to just ones that are relevant for the task at hand, or they may want to pick a tag that can be used to identify just the tools contributed by this extension."),

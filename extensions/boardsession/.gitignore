@@ -1,0 +1,14 @@
+node_modules/
+out/
+dist/
+packages/
+*.tsbuildinfo
+board-session/build/**/*.la
+board-session/build/CMakeCache.txt
+board-session/build/CMakeFiles/
+board-session/build/Makefile
+board-session/build/cmake_install.cmake
+board-session/build/wolfssh-source/
+board-session/dist/
+board-session/prebuilds/client-identity.pem
+board-session/*.tgz

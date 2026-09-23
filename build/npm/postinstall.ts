@@ -60,6 +60,11 @@ async function npmInstallAsync(dir: string, opts?: child_process.SpawnOptions): 
 		shell: true,
 	};
 
+	// This extension consumes an independently built npm archive, which must exist before npm resolves dependencies.
+	if (dir === 'extensions/boardsession') {
+		log(dir, await spawnAsync(process.execPath, ['scripts/prepare-core.mjs'], finalOpts));
+	}
+
 	const command = process.env['npm_command'] || 'install';
 
 	if (process.env['VSCODE_REMOTE_DEPENDENCIES_CONTAINER_NAME'] && /^(.build\/distro\/npm\/)?remote$/.test(dir)) {
