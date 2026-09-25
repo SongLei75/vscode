@@ -8,7 +8,7 @@
   "license": "UNLICENSED",
   "type": "module",
   "engines": {
-    "vscode": "^1.140.0"
+    "vscode": "^1.133.0"
   },
   "extensionKind": [
     "ui"

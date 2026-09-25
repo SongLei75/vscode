@@ -57,9 +57,6 @@ CommandsRegistry.registerCommand('_workbench.chat.showInput', (accessor, options
 		flows.set(options.id, flow);
 		store.add(widget.onDidHide(() => closeInput(options.id)));
 		store.add(widget.onDidChangeViewModel(() => closeInput(options.id)));
-		store.add(widgetService.onDidRemoveWidget(removed => {
-			if (removed === widget) { closeInput(options.id); }
-		}));
 	}
 	const { widget, prompt } = flow;
 	prompt.clear();

@@ -81,7 +81,8 @@ export class BoardSession {
       this.openingReject = error => { clearTimeout(timeout); reject(error); };
       const worker = this.worker = new Worker(new URL('./native-worker.js', import.meta.url), {
         workerData: { ...endpoint, username, pem },
-        execArgv: process.execArgv.filter(argument => !argument.startsWith('--input-type')),
+        // The VS Code extension host can carry Electron/V8 flags rejected by Node workers.
+      execArgv: [],
       });
       worker.on('message', message => {
         if (message.type === 'ready') {
