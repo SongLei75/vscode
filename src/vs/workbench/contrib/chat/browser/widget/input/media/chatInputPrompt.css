@@ -33,7 +33,7 @@
 	padding: 4px 12px;
 }
 
-/* Connection toggles must override the workbench toolbar's icon-foreground !important rule. */
-.interactive-session .chat-input-toolbars > .chat-execute-toolbar .monaco-action-bar .action-item > .action-label.codicon-plug.checked {
+/* The connected action is separate because extension commands do not support toggled. */
+.interactive-session .chat-input-toolbars > .chat-execute-toolbar .monaco-action-bar .action-item > .action-label.codicon-debug-disconnect {
 	color: var(--vscode-charts-blue) !important;
 }

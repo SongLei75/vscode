@@ -422,6 +422,9 @@ export class LanguageModelToolsService extends Disposable implements ILanguageMo
 		return Iterable.filter(
 			toolDatas,
 			toolData => {
+				if (this.getReplacement(toolData.id)) {
+					return false;
+				}
 				const satisfiesExternalToolCheck = toolData.source.type !== 'extension' || !!extensionToolsEnabled;
 				const satisfiesPermittedCheck = this.isPermitted(toolData);
 				return satisfiesExternalToolCheck && satisfiesPermittedCheck;

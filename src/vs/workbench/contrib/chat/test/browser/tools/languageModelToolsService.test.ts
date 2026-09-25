@@ -408,14 +408,18 @@ suite('LanguageModelToolsService', () => {
 			invoke: async () => ({ content: [] })
 		}, { when: ContextKeyExpr.has('alternateEnvironment'), replaces: ['localExecution'] });
 		const visible = () => Array.from(service.getTools(undefined), tool => tool.id);
+		const discoverable = () => Array.from(service.getAllToolsIncludingDisabled(), tool => tool.id);
 		assert.deepStrictEqual(visible(), ['localExecution']);
+		assert.deepStrictEqual(discoverable(), ['localExecution', 'alternateExecution']);
 		selected.set(true);
 		assert.deepStrictEqual(visible(), ['alternateExecution']);
+		assert.deepStrictEqual(discoverable(), ['alternateExecution']);
 		await assert.rejects(service.invokeTool(local.makeDto({}), async () => 0, CancellationToken.None), /alternateExecution/);
 		assert.strictEqual(calls, 0);
 		selected.set(false);
 		await service.invokeTool(local.makeDto({}), async () => 0, CancellationToken.None);
 		assert.deepStrictEqual({ visible: visible(), calls }, { visible: ['localExecution'], calls: 1 });
+		assert.deepStrictEqual(discoverable(), ['localExecution', 'alternateExecution']);
 	});
 
 	test('replacement tools recheck the environment after preparation', async () => {

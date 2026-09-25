@@ -42,16 +42,13 @@
         "title": "%command.toggle%",
         "icon": "$(plug)",
         "category": "BoardSession",
-        "enablement": "!boardsession.connecting",
-        "toggled": {
-          "condition": "boardsession.active && boardsession.connected",
-          "title": "%command.deactivate%"
-        }
+        "enablement": "!boardsession.connecting"
       },
       {
         "command": "boardsession.disconnect",
         "title": "%command.disconnect%",
-        "category": "BoardSession"
+        "category": "BoardSession",
+        "icon": "$(plug)"
       },
       {
         "command": "boardsession.cancel",
@@ -61,7 +58,7 @@
       },
       {
         "command": "boardsession.deactivate",
-        "title": "%command.disconnected%",
+        "title": "%command.deactivate%",
         "icon": "$(debug-disconnect)",
         "category": "BoardSession"
       }
@@ -70,7 +67,12 @@
       "chat/input/actions": [
         {
           "command": "boardsession.toggle",
-          "when": "isLinux && !boardsession.connecting && (!boardsession.active || boardsession.connected)",
+          "when": "isLinux && !boardsession.active && !boardsession.connecting",
+          "group": "navigation@-12"
+        },
+        {
+          "command": "boardsession.deactivate",
+          "when": "isLinux && boardsession.active && boardsession.connected && !boardsession.connecting",
           "group": "navigation@-12"
         },
         {
@@ -79,8 +81,8 @@
           "group": "navigation@-12"
         },
         {
-          "command": "boardsession.deactivate",
-          "when": "boardsession.active && !boardsession.connected && !boardsession.connecting",
+          "command": "boardsession.disconnect",
+          "when": "isLinux && boardsession.active && !boardsession.connected && !boardsession.connecting",
           "group": "navigation@-12"
         }
       ],
