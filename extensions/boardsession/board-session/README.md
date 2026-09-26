@@ -243,3 +243,34 @@ npm run test:functional
 ```
 
 省略 `BOARD_JUMPS` 测试直连；提供多项测试多跳。以上跳板仅接受 SSH forwarding，最终认证由运行测试包的 Node.js 进程中的本地 addon 完成。脚本不会在跳板上调用 `wolfssh`。
+
+
+
+## Connection Modes and Baton (Host Independent)
+
+`getConnectionModes()` returns the host-independent mode IDs `direct`, `baton`, and `jumpserver`. The consuming IDE owns display labels and interaction. All modes still end at the same `BoardSession.open({ board, jumps })`; the native transport and persistent shell do not know about reservation providers.
+
+```ts
+import { BatonClient, BoardSession, getConnectionModes } from '@carizon/board-session';
+
+const modes = getConnectionModes();
+const client = new BatonClient({ token: tokenFromYourCredentialStore });
+if (!await client.validateToken()) {
+  const token = await client.login(username, password);
+  await yourCredentialStore.save(token);
+}
+const boards = await client.listAvailableBoards();
+const durations = client.listDurations();
+const reservation = await client.reserve(selectedBoard, selectedDuration.minutes);
+const options = await client.resolveConnection(reservation, selectedBoard);
+await BoardSession.setIdentity(compositePem);
+const session = await BoardSession.open(options);
+```
+
+The Baton client intentionally implements only the flow needed to acquire a board and connect it: token validation/login, reservable-board discovery, duration choices, reservation creation, and conversion of the reservation response into `OpenOptions`. Reservation listing, renewal, release, history management, and UI are outside this package's current scope.
+
+The client never persists a token or imports VS Code. Pass `token` at construction or call `setToken(token)` to update it. `login` updates the in-memory token and returns that token to the host for optional persistence. Authentication rejection returns `false` from `validateToken`; network/server errors throw. Requests have a 30-second timeout and reservation creation is not automatically retried.
+
+Configuration precedence: explicit `apiUrl` / `authUrl`, environment `BENCHOPS_API_URL` / `BATON_AUTH_URL`, `~/.benchops/config.json` (`boardops_api_url`, `baton_auth_url`), then `https://board.carizon.work` / `https://auth.carizon.work`.
+
+Container reservations include the selected docker image and known ssh/perfetto port mappings; HIL uses the `use_docker_host_network` board-type dictionary flag. Resolution maps `server.ip_addr` plus the `name=ssh` default host port (22 if absent) to the Baton jump (`root` / `123456`), then `sub_boards[0].ip_addr` to the X.509 board (`root`, port 22). The unified Session layer remains 0-N-hop capable, but the Baton provider itself only models the platform data required by the current Baton flow.

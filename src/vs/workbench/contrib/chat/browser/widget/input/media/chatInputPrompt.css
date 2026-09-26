@@ -37,3 +37,16 @@
 .interactive-session .chat-input-toolbars > .chat-execute-toolbar .monaco-action-bar .action-item > .action-label.codicon-debug-disconnect {
 	color: var(--vscode-charts-blue) !important;
 }
+
+.chat-input-prompt-choices {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	max-height: 240px;
+	overflow-y: auto;
+}
+
+.chat-input-prompt-choices .monaco-button {
+	box-sizing: border-box;
+	white-space: normal;
+}

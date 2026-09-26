@@ -6,9 +6,13 @@
 
 在 Chat 输入栏中点击语音转文字按钮旁的插头按钮。首次连接在 Chat 内逐项填写，Enter 或 Next 继续，Escape 或 Cancel 取消。输入不会写入聊天记录，密码使用遮罩字段。
 
-板端依次填写 host、user、port、X.509 复合 PEM 路径，全部可以留空。默认值为 `192.168.2.62`、`root`、`22` 和安装后的核心 npm 包内 `prebuilds/client-identity.pem`。
+第一步选择 npm 包公开的连接模式：**Direct / Baton / JumpServer**。
 
-随后按实际连接顺序逐台填写跳板的 **host → user → port → password**。host 留空直接结束跳板列表，支持直连；其余字段留空分别使用 `root`、`22`、`123456`。端口必须为 1～65535 的整数。
+- **Direct**：依次填写 host、user、port、X.509 复合 PEM 路径，全部可以留空。默认值为 `192.168.2.62`、`root`、`22` 和安装后的核心 npm 包内 `prebuilds/client-identity.pem`。PEM 后立即连接，不询问跳板。
+- **Baton**：npm 校验已有 token；无 token 或失效时在 Chat 内输入 BenchOps 用户名和密码。随后选择板卡和预约时长，npm 完成预约、连接参数解析，再调用相同的 SSH Session API。无需输入网络参数，使用包内调试 identity。当前 OSS 扩展按 API/Auth 地址隔离保存在 extension globalState 中；npm 本身不规定 token 的持久化方式。服务地址由 npm 读取 `BENCHOPS_API_URL`、`BATON_AUTH_URL` 或 `~/.benchops/config.json`。
+- **JumpServer**：先填写同样的板端字段，再按真实连接顺序填写 **host → user → port → password**。至少一跳；后续 host 留空结束。其余字段留空分别使用 `root`、`22`、`123456`。所有手动端口必须为 1～65535 的整数。
+
+所有选择控件都在 Chat 内，支持键盘与取消；板卡列表过长时可滚动。Baton 的 API、时长选项、HIL/container 预约语义和 SSH 映射只存在于核心 npm 包。
 
 连接成功后插头显示激活色，Copilot 可使用：
 
@@ -19,7 +23,7 @@
 | `board_terminal_output` | 读取并消费未读输出 |
 | `board_terminal_kill` | 关闭板端 SSH 会话 |
 
-再次点击激活的按钮，退出板端模式并恢复本机工具；SSH 会话保留，下次激活直接复用。命令面板中的 **BoardSession: Disconnect Board Terminal** 会关闭连接并退出板端模式。
+再次点击激活的按钮，退出板端模式并恢复本机工具；SSH 会话保留，下次激活直接复用。Baton 只负责当前的“预约板卡并建立 SSH”流程，本扩展不实现预约列表、续期、释放或历史管理。命令面板中的 **BoardSession: Disconnect Board Terminal** 会关闭连接并退出板端模式。
 
 远端意外断线或工具主动关闭会话后，按钮显示断线状态。本机终端工具继续被阻止，避免同一轮对话因断线静默落回本机。点击断线按钮明确退出板端模式；再点击插头可重新连接。执行中的板端工具被取消时关闭其会话；核心包没有独立的取消建链 API，因此取消建链会丢弃并关闭晚到的连接，等待当前建链结束后才允许重试。
 
@@ -50,14 +54,10 @@ npm --prefix extensions/boardsession run compile
 ## 工程接入范围
 
 - `chat/input/actions` 将已有 Chat 输入栏 action menu 暴露给扩展；序列化的 action context 只携带会话 URI。
-- 内部 `_workbench.chat.showInput` / `closeInput` 命令提供 Chat 内的临时输入控件，切换会话、隐藏 Chat 或取消时清理控件。连接顺序、默认值及密码处理仍由本扩展决定。
+- 内部 `_workbench.chat.showInput` / `showPick` / `closeInput` 命令提供 Chat 内的临时输入控件，切换会话、隐藏 Chat 或取消时清理控件。连接顺序、默认值及密码处理仍由本扩展决定。
 - `languageModelTools.replaces` 声明当前工具的 `when` 条件成立时必须隐藏且禁止执行的工具 ID。通用工具服务不包含 BoardSession 名称、连接状态或终端业务规则。
 - 工程构建仅增加扩展入口、native 分类和安装前的核心打包步骤。
 
 ## 验证
 
-工作台类型检查、扩展类型检查、构建脚本类型检查，以及现有 `LanguageModelToolsService` 测试中的 replacement cases 覆盖工具切换和确认期间的竞争条件。实际 UI 检查覆盖按钮位置、字段顺序、默认值、非法端口重试、密码遮罩和取消。适配层还通过受控核心 API 验证多跳参数、连接复用、工具调用、断线和取消后关闭晚到连接。
-
-受当前环境内存限制，未执行完整 VS Code 工程构建；只执行扩展定向构建和相关检查。
-
-此次交付按约定不验证实板交互链路，以需求与代码审查、定向构建、工具服务测试、适配层检查和产物检查作为验收范围。实板直连和多跳尚未验证；后续有可达的板子及跳板路线时，可用核心包原有 `scripts/functional.mjs` 验证实际 SSH。
+保持扩展定向构建，未执行全量 VS Code compile。现有 terminal replacement 机制和工具定义未修改。

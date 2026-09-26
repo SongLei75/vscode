@@ -10,7 +10,7 @@ import { registerBoardTerminalTools } from './boardTerminalTools.js';
 
 /** Attaches the independent BoardSession package to Chat. */
 export async function activate(context: vscode.ExtensionContext) {
-	const connection = new BoardConnection();
+	const connection = new BoardConnection(context);
 	context.subscriptions.push(connection);
 	await connection.initialize();
 	context.subscriptions.push(

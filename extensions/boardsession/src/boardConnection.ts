@@ -6,7 +6,7 @@
 import * as vscode from 'vscode';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { BoardSession, type OpenOptions } from '@carizon/board-session';
+import { BoardSession, BatonClient, getConnectionModes, type BatonReservation, type ConnectionMode, type OpenOptions } from '@carizon/board-session';
 
 /** Owns mode selection and the single reusable session; protocol handling stays in the npm package. */
 export class BoardConnection implements vscode.Disposable {
@@ -17,7 +17,7 @@ export class BoardConnection implements vscode.Disposable {
 	private disposed = false;
 	private readonly monitor: ReturnType<typeof setInterval>;
 
-	constructor() {
+	constructor(private readonly context: vscode.ExtensionContext) {
 		// The core's public API exposes isClosed, with no close event.
 		this.monitor = setInterval(() => {
 			if (this.session?.isClosed) {
@@ -84,6 +84,7 @@ export class BoardConnection implements vscode.Disposable {
 
 	private async connect(generation: number, sessionResource?: string): Promise<void> {
 		const cancelled = () => this.disposed || generation !== this.generation;
+		let reservation: BatonReservation | undefined;
 		try {
 			const ask = async (title: string, placeholder: string, password = false): Promise<string> => {
 				if (cancelled()) { throw new vscode.CancellationError(); }
@@ -102,18 +103,69 @@ export class BoardConnection implements vscode.Disposable {
 					hint = vscode.l10n.t("Enter a TCP port from 1 to 65535; empty = 22");
 				}
 			};
-			const host = await ask(vscode.l10n.t("Board · IP / Host"), '192.168.2.62');
-			const username = await ask(vscode.l10n.t("Board · User"), 'root');
-			const port = await askPort(vscode.l10n.t("Board · Port"));
-			const identityPath = await ask(vscode.l10n.t("Board · X.509 PEM File"), vscode.l10n.t("Bundled internal debug identity (default)"));
-			const jumps: NonNullable<OpenOptions['jumps']> = [];
-			for (let index = 1; ; index++) {
-				const host = await ask(vscode.l10n.t("Jump {0} · IP / Host", index), vscode.l10n.t("Leave empty to finish and connect"));
-				if (!host) { break; }
-				const username = await ask(vscode.l10n.t("Jump {0} · User", index), 'root');
-				const port = await askPort(vscode.l10n.t("Jump {0} · Port", index));
-				const password = await ask(vscode.l10n.t("Jump {0} · Password", index), vscode.l10n.t("Leave empty to use the default password"), true);
-				jumps.push({ host, username: username || 'root', port, password: password || '123456' });
+			const pick = async <T extends { id: string; label: string }>(title: string, choices: readonly T[]): Promise<T> => {
+				if (cancelled()) { throw new vscode.CancellationError(); }
+				const id = await vscode.commands.executeCommand<string | undefined>('_workbench.chat.showPick', {
+					id: 'boardsession', title, choices: choices.map(({ id, label }) => ({ id, label })), sessionResource,
+				});
+				const selected = choices.find(choice => choice.id === id);
+				if (!selected || cancelled()) { throw new vscode.CancellationError(); }
+				return selected;
+			};
+			const modeLabels: Record<ConnectionMode, string> = {
+				direct: vscode.l10n.t("Direct"), baton: vscode.l10n.t("Baton"), jumpserver: vscode.l10n.t("JumpServer"),
+			};
+			const { id: mode } = await pick(vscode.l10n.t("Board · Connection Mode"), getConnectionModes().map(id => ({ id, label: modeLabels[id] })));
+			let options: OpenOptions;
+			let identityPath = '';
+			if (mode === 'baton') {
+				const client = new BatonClient();
+				// Scope credentials to the configured services; demo and production tokens never overlap.
+				const tokenKey = `boardsession.baton.token:${client.apiUrl}:${client.authUrl}`;
+				const token = this.context.globalState.get<string>(tokenKey);
+				if (!await client.validateToken(token)) {
+					await this.context.globalState.update(tokenKey, undefined);
+					let username = '';
+					while (!username) { username = await ask(vscode.l10n.t("Baton · Username"), vscode.l10n.t("BenchOps username")); }
+					let password = '';
+					while (!password) { password = await ask(vscode.l10n.t("Baton · Password"), vscode.l10n.t("BenchOps password"), true); }
+					const token = await client.login(username, password);
+					await this.context.globalState.update(tokenKey, token);
+				}
+				if (cancelled()) { throw new vscode.CancellationError(); }
+				const boards = await client.listAvailableBoards();
+				if (!boards.length) { throw new Error(vscode.l10n.t("No reservable boards are currently available.")); }
+				const selected = await pick(vscode.l10n.t("Baton · Select Board"), boards.map(board => ({
+					id: board.b_id, label: `${board.device_code} · ${board.vehicle_model || board.project_code || board.hardware_platform || board.type_name || ''}`, board,
+				})));
+				const duration = await pick(vscode.l10n.t("Baton · Reservation Duration"), client.listDurations().map(duration => ({
+					id: String(duration.minutes), label: duration.label, minutes: duration.minutes,
+				})));
+				if (cancelled()) { throw new vscode.CancellationError(); }
+				reservation = await client.reserve(selected.board, duration.minutes);
+				void vscode.window.showInformationMessage(vscode.l10n.t("Baton reservation {0} created until {1}.", reservation.b_id, reservation.end_at));
+				if (cancelled()) { throw new vscode.CancellationError(); }
+				options = await client.resolveConnection(reservation, selected.board);
+			} else {
+				const host = await ask(vscode.l10n.t("Board · IP / Host"), '192.168.2.62');
+				const username = await ask(vscode.l10n.t("Board · User"), 'root');
+				const port = await askPort(vscode.l10n.t("Board · Port"));
+				identityPath = await ask(vscode.l10n.t("Board · X.509 PEM File"), vscode.l10n.t("Bundled internal debug identity (default)"));
+				const jumps: NonNullable<OpenOptions['jumps']> = [];
+				for (let index = 1; mode === 'jumpserver'; index++) {
+					const host = await ask(vscode.l10n.t("Jump {0} · IP / Host", index), vscode.l10n.t("Leave empty to finish and connect"));
+					if (!host) {
+						if (jumps.length) { break; }
+						void vscode.window.showWarningMessage(vscode.l10n.t("JumpServer requires at least one jump. Use Direct for a direct connection."));
+						index--;
+						continue;
+					}
+					const username = await ask(vscode.l10n.t("Jump {0} · User", index), 'root');
+					const port = await askPort(vscode.l10n.t("Jump {0} · Port", index));
+					const password = await ask(vscode.l10n.t("Jump {0} · Password", index), vscode.l10n.t("Leave empty to use the default password"), true);
+					jumps.push({ host, username: username || 'root', port, password: password || '123456' });
+				}
+				options = { board: { host: host || '192.168.2.62', username: username || 'root', port }, jumps };
 			}
 			const defaultIdentity = fileURLToPath(new URL('../prebuilds/client-identity.pem', import.meta.resolve('@carizon/board-session')));
 			const identity = await readFile(identityPath || defaultIdentity);
@@ -124,7 +176,7 @@ export class BoardConnection implements vscode.Disposable {
 				identity.fill(0);
 			}
 			if (cancelled()) { throw new vscode.CancellationError(); }
-			const candidate = await BoardSession.open({ board: { host: host || '192.168.2.62', username: username || 'root', port }, jumps });
+			const candidate = await BoardSession.open(options);
 			if (cancelled() || candidate.isClosed) {
 				await candidate.close();
 				if (!cancelled()) { throw new Error(vscode.l10n.t("Board closed during connection.")); }
@@ -134,6 +186,9 @@ export class BoardConnection implements vscode.Disposable {
 			this.selected = true;
 			await this.publishState();
 		} catch (error) {
+			if (reservation && !this.disposed) {
+				void vscode.window.showWarningMessage(vscode.l10n.t("Baton reservation {0} succeeded, but the SSH connection did not finish.", reservation.b_id));
+			}
 			if (!(error instanceof vscode.CancellationError) && !cancelled()) {
 				void vscode.window.showErrorMessage(vscode.l10n.t("Board connection failed: {0}", String(error)));
 			}
