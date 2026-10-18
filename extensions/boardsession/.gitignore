@@ -1,0 +1,7 @@
+node_modules/
+out/
+dist/
+*.tsbuildinfo
+# Leftovers from the previous in-tree implementation; the npm package is now separate.
+board-session/
+packages/

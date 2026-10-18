@@ -1,0 +1,208 @@
+{
+  "name": "boardsession",
+  "displayName": "BoardSession",
+  "description": "Switch Copilot Chat terminal tools between the local environment and a BoardSession SSH session.",
+  "version": "0.1.0",
+  "publisher": "carizon",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "engines": {
+    "vscode": "^1.133.0"
+  },
+  "extensionKind": [
+    "workspace"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "scripts": {
+    "compile": "node esbuild.mts"
+  },
+  "dependencies": {
+    "@carizon/board-session": "0.1.0-carizon"
+  },
+  "capabilities": {
+    "virtualWorkspaces": false,
+    "untrustedWorkspaces": {
+      "supported": false
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.6"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "boardsession.toggle",
+        "title": "%command.toggle%",
+        "icon": "$(debug-disconnect)",
+        "category": "BoardSession"
+      },
+      {
+        "command": "boardsession.disconnect",
+        "title": "%command.disconnect%",
+        "category": "BoardSession",
+        "icon": "$(debug-disconnect)"
+      },
+      {
+        "command": "boardsession.cancel",
+        "title": "%command.cancel%",
+        "icon": "$(loading~spin)",
+        "category": "BoardSession"
+      },
+      {
+        "command": "boardsession.deactivate",
+        "title": "%command.deactivate%",
+        "icon": "$(debug-disconnect)",
+        "category": "BoardSession"
+      }
+    ],
+    "menus": {
+      "chat/input/actions": [
+        {
+          "command": "boardsession.toggle",
+          "group": "navigation@-12"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "boardsession.toggle",
+          "when": "false"
+        },
+        {
+          "command": "boardsession.disconnect",
+          "when": "false"
+        },
+        {
+          "command": "boardsession.cancel",
+          "when": "false"
+        },
+        {
+          "command": "boardsession.deactivate",
+          "when": "false"
+        }
+      ]
+    },
+    "languageModelTools": [
+      {
+        "icon": "$(terminal)",
+        "tags": [
+          "terminal",
+          "execute"
+        ],
+        "name": "board_terminal_run",
+        "toolReferenceName": "board_terminal_run",
+        "canBeReferencedInPrompt": true,
+        "displayName": "%board_terminal_run.displayName%",
+        "userDescription": "%board_terminal_run.userDescription%",
+        "modelDescription": "Execute a command in the persistent shell of the connected remote board. NEVER run a local terminal tool when board mode is active. The returned id is board; completed false means the command is still running. Use board_terminal_send for interactive input and board_terminal_output to retrieve output; do not launch another run while one is active.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "command": {
+              "type": "string",
+              "description": "Shell command to execute on remote board"
+            },
+            "timeoutMs": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647,
+              "description": "Wait before returning incomplete; does not cancel remote command"
+            }
+          },
+          "required": [
+            "command"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "icon": "$(terminal)",
+        "tags": [
+          "terminal",
+          "execute"
+        ],
+        "name": "board_terminal_send",
+        "toolReferenceName": "board_terminal_send",
+        "canBeReferencedInPrompt": true,
+        "displayName": "%board_terminal_send.displayName%",
+        "userDescription": "%board_terminal_send.userDescription%",
+        "modelDescription": "Send input to the active board shell, including interactive input while board_terminal_run is pending or timed out. The input is sent to the remote board, not the local terminal.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "command": {
+              "type": "string",
+              "description": "Input text for the remote board shell"
+            },
+            "appendNewline": {
+              "type": "boolean",
+              "description": "Append Enter; default true"
+            }
+          },
+          "required": [
+            "command"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "icon": "$(terminal)",
+        "tags": [
+          "terminal",
+          "execute"
+        ],
+        "name": "board_terminal_output",
+        "toolReferenceName": "board_terminal_output",
+        "canBeReferencedInPrompt": true,
+        "displayName": "%board_terminal_output.displayName%",
+        "userDescription": "%board_terminal_output.userDescription%",
+        "modelDescription": "Read and consume unread output from the connected remote board terminal.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      {
+        "icon": "$(terminal)",
+        "tags": [
+          "terminal",
+          "execute"
+        ],
+        "name": "board_terminal_kill",
+        "toolReferenceName": "board_terminal_kill",
+        "canBeReferencedInPrompt": true,
+        "displayName": "%board_terminal_kill.displayName%",
+        "userDescription": "%board_terminal_kill.userDescription%",
+        "modelDescription": "Close the remote board session. Board mode remains selected to prevent accidental local execution. Use the connection button to reconnect or explicitly deactivate board mode.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        }
+      }
+    ],
+    "configuration": {
+      "title": "BoardSession",
+      "properties": {
+        "boardsession.identityFile": {
+          "type": "string",
+          "default": "",
+          "description": "Shared X.509 PEM on the workspace extension host. Set before activation; all chats use this identity. Empty uses the bundled internal debug identity."
+        }
+      }
+    }
+  },
+  "allowScripts": {
+    "ssh2": false,
+    "cpu-features": false
+  },
+  "enabledApiProposals": [
+    "chatParticipantPrivate"
+  ]
+}

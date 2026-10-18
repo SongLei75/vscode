@@ -103,6 +103,7 @@ import { isAutoApprovePolicyRestricted, isAutoApproveValuePolicyRestricted } fro
 import { IChatEditingSession, IModifiedFileEntry, ModifiedFileEntryState } from '../../../common/editing/chatEditingService.js';
 import { ILanguageModelChatMetadata, ILanguageModelChatMetadataAndIdentifier, ILanguageModelsService, isAutoLanguageModel } from '../../../common/languageModels.js';
 import { ChatInputModelSelectionController, IChatInputModelSelectionRuntime } from './chatInputModelSelectionController.js';
+import { chatSessionActionStates, getChatToolbarHover, onDidChangeChatToolbarHover } from './chatToolbarHover.js';
 import { ChatModelConfigurationStore } from './chatModelConfigurationStore.js';
 import { AgentHostAutoTierScope } from '../../agentSessions/agentHost/agentHostAutoTierScope.js';
 import { ChatModelSelectionDiagnostics } from './chatModelSelectionDiagnostics.js';
@@ -1150,6 +1151,7 @@ export class ChatInputPart extends Disposable implements IHistoryNavigationWidge
 			}
 		}));
 		this.selectedToolsModel = this._register(this.instantiationService.createInstance(ChatSelectedTools, this.currentModeObs, this._currentLanguageModel));
+		this.selectedToolsModel.sessionResource = this._currentSessionResourceObservable;
 		this.dnd = this._register(this.instantiationService.createInstance(ChatDragAndDrop, () => this._widget, {
 			get attachments() { return attachmentModel.attachments; },
 			addAttachments: (entries: readonly IChatRequestVariableEntry[]) => attachmentModel.addContext(...entries),
@@ -3864,6 +3866,48 @@ export class ChatInputPart extends Disposable implements IHistoryNavigationWidge
 				// push-to-talk stop action, so cover both so the menu stays put.
 				if ((action.id === 'agentsVoice.startVoiceInChat' || action.id === 'agentsVoice.pttStopInChat') && action instanceof MenuItemAction) {
 					return this.instantiationService.createInstance(VoiceModeActionViewItem, action, options);
+				}
+				if (action.id === 'boardsession.toggle' && action instanceof MenuItemAction) {
+					return this.instantiationService.createInstance(class extends MenuEntryActionViewItem {
+						override setActionContext(): void {
+							// Keep a plain, current URI at the extension command boundary.
+							this._context = { get sessionResource() { return widget.viewModel?.sessionResource.toString(); } };
+						}
+						override render(container: HTMLElement): void {
+							super.render(container);
+							this._register(onDidChangeChatToolbarHover(event => {
+								if (event.actionId === action.id && (!event.sessionResource || isEqual(event.sessionResource, widget.viewModel?.sessionResource))) {
+									this.updateTooltip();
+								}
+							}));
+							this._register(autorun(reader => {
+								const key = widget.inputPart.selectedToolsModel.sessionResource.read(reader)?.toString();
+								const state = key ? chatSessionActionStates.observable.read(reader).get(key)?.get(action.id) : undefined;
+								container.classList.toggle('checked', !!state?.active);
+								container.setAttribute('aria-label', state?.label ?? action.label);
+								if (this.label) {
+								const busy = !!state?.busy;
+								const connected = !!state?.connected;
+								this.label.setAttribute('aria-label', state?.label ?? action.label);
+								this.label.classList.remove('codicon-plug', 'codicon-loading');
+								this.label.classList.toggle('codicon-loading-compact', busy);
+								this.label.classList.toggle('codicon-modifier-spin', busy);
+								this.label.classList.toggle('codicon-debug-disconnect', !busy && !connected);
+								this.label.classList.toggle('codicon-debug-connected', !busy && connected);
+								}
+							}));
+						}
+						protected override updateAriaLabel(): void {
+							super.updateAriaLabel();
+							const key = widget.viewModel?.sessionResource.toString();
+							const state = key ? chatSessionActionStates.get(key)?.get(action.id) : undefined;
+							this.element?.setAttribute('aria-label', state?.label ?? action.label);
+							this.label?.setAttribute('aria-label', state?.label ?? action.label);
+						}
+						protected override getHoverContents() {
+							return getChatToolbarHover(action.id, this.getTooltip(), () => ({ sessionResource: widget.viewModel?.sessionResource.toString() }));
+						}
+					}, action, options);
 				}
 				return undefined;
 			},

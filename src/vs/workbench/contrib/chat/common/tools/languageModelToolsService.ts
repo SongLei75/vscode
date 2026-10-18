@@ -12,7 +12,7 @@ import { Iterable } from '../../../../../base/common/iterator.js';
 import { IJSONSchema } from '../../../../../base/common/jsonSchema.js';
 import { Disposable, IDisposable, toDisposable } from '../../../../../base/common/lifecycle.js';
 import { Schemas } from '../../../../../base/common/network.js';
-import { derived, IObservable, IReader, ITransaction, ObservableSet } from '../../../../../base/common/observable.js';
+import { derived, IObservable, IReader, ITransaction, ObservableMap, ObservableSet } from '../../../../../base/common/observable.js';
 import { ThemeIcon } from '../../../../../base/common/themables.js';
 import { URI } from '../../../../../base/common/uri.js';
 import { Location } from '../../../../../editor/common/languages.js';
@@ -30,6 +30,18 @@ import { ConfirmedReason, IChatAgentFeedbackReviewConfirmationData, IChatAutomat
 import { ILanguageModelChatMetadata, LanguageModelPartAudience } from '../languageModels.js';
 import { UserSelectedTools } from '../participants/chatAgents.js';
 import { PromptElementJSON, stringifyPromptElementJSON } from './promptTsxTypes.js';
+
+/** Internal host overrides: the empty key contains defaults, URI keys contain per-chat overrides. */
+export const chatSessionToolOverrides = new ObservableMap<string, ReadonlyMap<string, boolean>>();
+
+/** Rechecked immediately before execution, including after asynchronous tool preparation. */
+export function assertChatSessionToolEnabled(toolId: string, sessionResource: URI | undefined): void {
+	const enabled = (sessionResource ? chatSessionToolOverrides.get(sessionResource.toString())?.get(toolId) : undefined)
+		?? chatSessionToolOverrides.get('')?.get(toolId);
+	if (enabled === false) {
+		throw new Error(localize('chatSessionToolDisabled', "Tool {0} is unavailable in this chat's execution environment. Use its connection button to select the environment.", toolId));
+	}
+}
 
 /**
  * Selector for matching language models by vendor, family, version, or id.

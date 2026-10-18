@@ -5,7 +5,7 @@
 
 import { CancellationToken } from '../../../../../../base/common/cancellation.js';
 import { Disposable } from '../../../../../../base/common/lifecycle.js';
-import { derived, IObservable, ObservableMap } from '../../../../../../base/common/observable.js';
+import { constObservable, derived, IObservable, ObservableMap } from '../../../../../../base/common/observable.js';
 import { isObject } from '../../../../../../base/common/types.js';
 import { URI } from '../../../../../../base/common/uri.js';
 import { IInstantiationService } from '../../../../../../platform/instantiation/common/instantiation.js';
@@ -16,7 +16,7 @@ import { ChatModeKind } from '../../../common/constants.js';
 import { ILanguageModelChatMetadataAndIdentifier } from '../../../common/languageModels.js';
 import { UserSelectedTools } from '../../../common/participants/chatAgents.js';
 import { PromptsStorage } from '../../../common/promptSyntax/service/promptsService.js';
-import { ILanguageModelToolsService, IToolData, isToolSet, ToolAndToolSetEnablementMap, IToolSet } from '../../../common/tools/languageModelToolsService.js';
+import { chatSessionToolOverrides, ILanguageModelToolsService, IToolData, isToolSet, ToolAndToolSetEnablementMap, IToolSet } from '../../../common/tools/languageModelToolsService.js';
 import { PromptFileRewriter } from '../../promptSyntax/promptFileRewriter.js';
 
 
@@ -98,6 +98,8 @@ export enum ToolsScope {
 
 export class ChatSelectedTools extends Disposable {
 
+	sessionResource: IObservable<URI | undefined> = constObservable(undefined);
+
 	private readonly _globalState: ObservableMemento<ToolEnablementStates>;
 
 	private readonly _sessionStates = new ObservableMap<string, ToolEnablementStates | undefined>();
@@ -162,6 +164,14 @@ export class ChatSelectedTools extends Disposable {
 			map.set(toolSet, toolSetEnabled);
 			for (const tool of toolSet.getTools(r)) {
 				map.set(tool, toolSetEnabled || currentMap.tools.get(tool.id) === true); // if unknown, use toolSetEnabled
+			}
+		}
+		const overrides = chatSessionToolOverrides.observable.read(r);
+		const sessionKey = this.sessionResource.read(r)?.toString();
+		for (const [tool] of map) {
+			if (!isToolSet(tool)) {
+				const enabled = (sessionKey ? overrides.get(sessionKey)?.get(tool.id) : undefined) ?? overrides.get('')?.get(tool.id);
+				if (enabled !== undefined) { map.set(tool, enabled); }
 			}
 		}
 		return ToolAndToolSetEnablementMap.fromMap(map);

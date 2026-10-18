@@ -7,6 +7,12 @@ import { Schemas } from '../../../../base/common/network.js';
 import { status } from '../../../../base/browser/ui/aria/aria.js';
 import { basename, isEqual } from '../../../../base/common/resources.js';
 import { URI } from '../../../../base/common/uri.js';
+// The Agents/Sessions window builds on its own entry point (sessions.common.main) and does not
+// load workbench.common.main, so the shared chat input bridges must be registered here as well.
+// Otherwise `_workbench.chat.showInput` / `showPick` / `closeInput` / `registerActionHover`
+// are not available and BoardSession-style extensions fail when invoked from this window.
+import '../../../../workbench/contrib/chat/browser/widget/input/chatInputPrompt.js';
+import '../../../../workbench/contrib/chat/browser/widget/input/chatToolbarHover.js';
 import { ServicesAccessor } from '../../../../editor/browser/editorExtensions.js';
 import { localize, localize2 } from '../../../../nls.js';
 import { Action2, MenuId, registerAction2 } from '../../../../platform/actions/common/actions.js';

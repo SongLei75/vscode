@@ -1,0 +1,11 @@
+src/**
+out/**
+scripts/**
+node_modules/**
+esbuild.mts
+tsconfig.json
+**/*.tsbuildinfo
+# Do not package old in-tree build artifacts from another branch.
+board-session/**
+packages/**
+ACCEPTANCE.md

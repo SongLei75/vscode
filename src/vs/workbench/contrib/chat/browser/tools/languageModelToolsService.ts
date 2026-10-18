@@ -52,7 +52,7 @@ import { HookType } from '../../common/promptSyntax/hookTypes.js';
 import { CopilotChatSettingId, CopilotToolId } from '../../common/tools/copilotToolIds.js';
 import { ILanguageModelToolsConfirmationService } from '../../common/tools/languageModelToolsConfirmationService.js';
 import { TerminalToolId } from '../../common/tools/terminalToolIds.js';
-import { CountTokensCallback, createToolSchemaUri, IBeginToolCallOptions, IExternalPreToolUseHookResult, ILanguageModelToolsService, IPreparedToolInvocation, isToolSet, IToolData, IToolImpl, IToolInvocation, IToolInvokedEvent, IToolResult, IToolResultInputOutputDetails, IToolSet, SpecedToolAliases, stringifyPromptTsxPart, ToolAndToolSetEnablementMap, ToolDataSource, ToolInvocationPresentation, toolMatchesModel, ToolSet, ToolSetForModel, VSCodeToolReference } from '../../common/tools/languageModelToolsService.js';
+import { assertChatSessionToolEnabled, CountTokensCallback, createToolSchemaUri, IBeginToolCallOptions, IExternalPreToolUseHookResult, ILanguageModelToolsService, IPreparedToolInvocation, isToolSet, IToolData, IToolImpl, IToolInvocation, IToolInvokedEvent, IToolResult, IToolResultInputOutputDetails, IToolSet, SpecedToolAliases, stringifyPromptTsxPart, ToolAndToolSetEnablementMap, ToolDataSource, ToolInvocationPresentation, toolMatchesModel, ToolSet, ToolSetForModel, VSCodeToolReference } from '../../common/tools/languageModelToolsService.js';
 import { IToolResultCompressor } from '../../common/tools/toolResultCompressor.js';
 import { getToolConfirmationAlert } from '../accessibility/chatAccessibilityProvider.js';
 import { IChatWidgetService } from '../chat.js';
@@ -604,6 +604,7 @@ export class LanguageModelToolsService extends Disposable implements ILanguageMo
 		let preparedInvocation: IPreparedToolInvocation | undefined;
 		let activeTool = tool;
 		try {
+			assertChatSessionToolEnabled(dto.toolId, dto.context?.sessionResource);
 			if (dto.context) {
 				if (!model) {
 					throw new Error(`Tool called for unknown chat session`);
@@ -728,6 +729,7 @@ export class LanguageModelToolsService extends Disposable implements ILanguageMo
 				throw new CancellationError();
 			}
 
+			assertChatSessionToolEnabled(dto.toolId, dto.context?.sessionResource);
 			invocationTimeWatch = StopWatch.create(true);
 			const currentTool = this._tools.get(dto.toolId);
 			if (!currentTool) {
