@@ -7,8 +7,8 @@ import * as vscode from 'vscode';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
-import { BoardManager, BoardSession, type BatonClient, type BatonBoard, type BoardEvent } from '@carizon/board-session';
-import { boardHover, collectBoard, pickBoard, reserveManagedBoard } from './boardManagementUi.js';
+import { BoardManager, BoardSession, type BoardEvent } from '@carizon/board-session';
+import { boardHover, collectBoard, pickBoard } from './boardManagementUi.js';
 
 interface ChatBinding {
 	boardId: string;
@@ -30,12 +30,10 @@ export class BoardConnection implements vscode.Disposable {
 	// Retain mode after SSH loss or resource release, until the user explicitly returns to local tools.
 	private readonly boardModes = new Set<string>();
 	private readonly operations = new Map<string, ChatOperation>();
-	private readonly reservations = new Map<string, Promise<string>>();
-	private readonly batonBoards = new Map<string, string>();
 	private readonly unsubscribe: () => void;
 	private disposed = false;
 
-	constructor(private readonly context: vscode.ExtensionContext) {
+	constructor() {
 		this.unsubscribe = this.manager.onDidChange(event => this.onBoardEvent(event));
 	}
 
@@ -60,7 +58,7 @@ export class BoardConnection implements vscode.Disposable {
 		const binding = this.bindings.get(key);
 		if (binding?.session.isClosed) {
 			this.bindings.delete(key);
-			await this.manager.closeSession(binding.session);
+			await binding.session.close();
 		}
 		const active = this.boardModes.has(key);
 		const busy = this.operations.has(key);
@@ -103,7 +101,7 @@ export class BoardConnection implements vscode.Disposable {
 
 	async hover(resource?: string): Promise<vscode.MarkdownString> {
 		const key = this.chatKey(resource);
-		const snapshot = await this.manager.refresh();
+		const snapshot = this.manager.listManagedBoards();
 		await this.publishState(key);
 		return boardHover(snapshot, key, this.bindings.get(key)?.boardId, this.operations.has(key));
 	}
@@ -147,56 +145,32 @@ export class BoardConnection implements vscode.Disposable {
 			if (cancelled()) { throw new vscode.CancellationError(); }
 			this.bindings.set(key, { boardId: id, session });
 			bound = true;
-			if (previous) { await this.manager.closeSession(previous.session); }
+			if (previous) { await previous.session.close(); }
 		} catch (error) {
 			// A failed first connection must not strand a local chat in board mode.
 			if (!bound && !wasInBoardMode) { this.boardModes.delete(key); }
 			throw error;
 		} finally {
 			if (!bound) {
-				try { await this.manager.closeSession(session); }
+				try { await session.close(); }
 				catch (error) { console.error('Board session cleanup failed', error); }
 			}
 		}
 	}
 
-	private acquireBaton(client: BatonClient, board: BatonBoard): Promise<string> {
-		const deviceKey = `${client.apiUrl}:${board.b_id}`;
-		const existing = this.batonBoards.get(deviceKey);
-		if (existing && this.manager.getBoard(existing)) { return Promise.resolve(existing); }
-		const pending = this.reservations.get(deviceKey);
-		if (pending) { return pending; }
-		const acquiring = reserveManagedBoard(client, board, (managed, lifecycle) => {
-			if (this.disposed) { throw new vscode.CancellationError(); }
-			this.manager.addBoard(managed, lifecycle);
-			this.batonBoards.set(deviceKey, managed.id);
-			void this.invalidateHover();
-		});
-		this.reservations.set(deviceKey, acquiring);
-		void acquiring.finally(() => this.reservations.delete(deviceKey)).catch(() => {});
-		return acquiring;
-	}
-
 	private async add(key: string, cancelled: () => boolean, flowId: string): Promise<void> {
-		const collected = await collectBoard(this.context, cancelled, key, flowId);
+		const collected = await collectBoard(this.manager, cancelled, key, flowId);
 		if (cancelled()) { throw new vscode.CancellationError(); }
-		let id: string;
-		if ('client' in collected) {
-			id = await this.acquireBaton(collected.client, collected.board);
-		} else {
-			this.manager.addBoard(collected.board);
-			id = collected.board.id;
-			await this.invalidateHover();
-		}
-		// Once registered, the Manager owns the resource, even if this chat's SSH open fails/cancels.
-		await this.connect(key, id, cancelled);
+		const board = await this.manager.addBoard(collected.providerId, collected.input);
+		// Once added, Manager owns the resource, including when SSH open fails or is cancelled.
+		await this.connect(key, board.id, cancelled);
 	}
 
 	async toggle(resource?: string): Promise<void> {
 		const key = this.chatKey(resource);
 		if (this.operations.has(key)) { await this.cancel(key); return; }
 		await this.runUi(key, async (cancelled, flowId) => {
-			const snapshot = await this.manager.refresh();
+			const snapshot = this.manager.listManagedBoards();
 			const choice = await pickBoard(snapshot, key, flowId);
 			if (choice === 'add') { await this.add(key, cancelled, flowId); }
 			else { await this.connect(key, choice, cancelled); }
@@ -235,7 +209,7 @@ export class BoardConnection implements vscode.Disposable {
 			throw new Error(vscode.l10n.t("Board disconnected or released. Reconnect from this chat; no command was sent locally."));
 		}
 		const listener = token.onCancellationRequested(() => {
-			void this.manager.closeSession(binding.session).finally(async () => {
+			void binding.session.close().finally(async () => {
 				await this.publishState(key);
 				await this.invalidateHover(key);
 			}).catch(error => console.error('Board cancellation failed', error));
@@ -264,7 +238,7 @@ export class BoardConnection implements vscode.Disposable {
 		const binding = this.bindings.get(key);
 		this.bindings.delete(key);
 		try {
-			if (binding) { await this.manager.closeSession(binding.session); }
+			if (binding) { await binding.session.close(); }
 		} finally {
 			if (restoreLocal) { this.boardModes.delete(key); }
 			await this.publishState(key);
@@ -286,6 +260,9 @@ export class BoardConnection implements vscode.Disposable {
 			operation.cancelled = true;
 			void vscode.commands.executeCommand('_workbench.chat.closeInput', operation.flowId);
 		}
-		void this.manager.dispose().catch(error => console.error('BoardSession shutdown failed', error));
+		// BoardManager no longer has dispose(). Best-effort release of all owned resources.
+		for (const board of this.manager.listManagedBoards()) {
+			void this.manager.removeBoard(board.id).catch(error => console.error('BoardSession shutdown failed', board.name, error));
+		}
 	}
 }

@@ -6,10 +6,10 @@
 
 在 Chat 输入栏中点击语音转文字按钮旁的插头按钮。首次连接在 Chat 内逐项填写，按 Enter 或 Next 继续，按 Escape 或 Cancel 取消。输入仅用于扩展操作，不会发送给聊天模型或写入聊天记录；密码使用遮罩字段。隐藏 Chat 或切换 Chat 会清理当前输入流程。
 
-第一步选择 npm 包公开的连接模式：**Direct / Baton / JumpServer**。
+第一步仍选择 **Direct / Baton / JumpServer**；Direct 和 JumpServer 都映射到新的 static Provider，Baton 映射到 baton Provider。板卡管理统一由 npm 包的 BoardManager 完成。
 
 - **Direct**：依次填写板端 host、user、port；host 和 user 留空时分别使用 `192.168.2.62` 和 `root`，port 留空时使用 `22`。板端 X.509 复合 PEM 由 `boardsession.identityFile` 设置提供，不在连接向导中询问；设置为空时使用核心 npm 包内的 `prebuilds/debug.key`。同一扩展 host 中的所有 Chat 共用该 identity。
-- **Baton**：扩展按 API/Auth 地址从 VS Code `SecretStorage` 读取 token 并验证；没有 token 或 token 失效时，在 Chat 内输入 BenchOps 用户名和密码。密码不持久化，登录后取得的 token 存入 `SecretStorage`，key 按 API/Auth 地址隔离。随后选择可预约板卡；扩展当前固定创建 60 分钟预约，不提供时长选择。网络地址由 npm 包读取 `BENCHOPS_API_URL`、`BATON_AUTH_URL` 或 `~/.benchops/config.json`，预约、连接参数解析和续约/释放由 npm 包负责。
+- **Baton**：先调用 Manager 验证当前内存中的 token；如需重新登录，在 Chat 内填写用户名和密码。登录后查询 Provider 的可预约板卡列表，再通过 Manager 添加板卡。预约、连接参数解析、续约及释放均由 npm 包负责。新版包的 token 只在 Provider 内存保存，不再支持旧版 SecretStorage 的跨宿主重启自动登录；密码不持久化。服务地址仍取自环境变量或 BenchOps 配置。
 - **JumpServer**：先填写板端 host、user、port（默认值同 Direct），再按连接顺序填写至少一个跳板的 **host → user → port → password**。第一个跳板 host 不能为空；之后的 host 留空即可结束。跳板 user、port、password 留空时分别使用 `root`、`22`、`123456`。所有手动端口必须为 1～65535 的整数。
 
 所有选择控件都在 Chat 内，支持键盘与取消；板卡列表过长时可滚动。Baton 的 API、时长选项、HIL/container 预约语义和 SSH 映射只存在于核心 npm 包。
@@ -27,7 +27,7 @@
 
 **释放** 对所有板都可用：确认后关闭该板的全部 SSH 会话，再调用资源的释放回调（Baton 板会释放预约），成功后删除记录。释放失败时记录会保留，供用户重试；释放中的资源不可新建连接。
 
-Baton 预约在资源有活动时由 `BoardManager` 自动续约，默认在到期前 5 分钟尝试延长 60 分钟；自动续约失败不会重试，到期时会关闭会话并移除本地记录。若带释放回调的资源连续 10 分钟没有操作或连接中的会话，Manager 会关闭该板的 SSH 并自动调用释放回调。自然过期不会再调用释放 API。释放、释放失败和过期会显示通知；没有到期前提醒。扩展 host 重启后，内存中的板记录不会恢复。
+Baton 预约由 BoardManager 自动管理；默认在到期前约 10 分钟开始续约，由 Provider 决定续约时长。默认空闲 10 分钟后，仅带有释放能力的资源自动回收；Static 板卡不会自动释放。过期、释放失败和续约失败会反映到通知和 Hover；扩展关闭时尽力释放剩余管理资源，但宿主退出可能中断异步操作。重启后内存板卡记录不会恢复。
 
 连接意外断开、`board_terminal_kill` 关闭会话、资源释放或过期后，当前 Chat 仍保持板端模式，本机终端工具继续被禁用，避免操作静默落回本机。可通过连接按钮重新连接；需要恢复本机工具时，显式执行 `boardsession.deactivate`。连接仍正常时，也可在 Hover 中点击当前板名断开并恢复本机工具。取消正在执行的板端工具会关闭该 Chat 捕获的 SSH 会话；取消连接流程时，已开始的 SSH 建链会在返回后关闭，当前建链结束前不能重试。
 
