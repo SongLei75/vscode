@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-__NONCE__'; script-src 'nonce-__NONCE__';">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CarizonBoards</title>
+<style nonce="__NONCE__">
+:root { color-scheme: light dark; }
+body { margin:0; padding:24px; background:var(--vscode-editor-background); color:var(--vscode-editor-foreground); font-family:var(--vscode-font-family); font-size:13px; }
+h2 { font-size:16px; margin:0; }
+small, .muted { color:var(--vscode-descriptionForeground); }
+.controls { display:flex; gap:8px; flex-wrap:wrap; }
+button { cursor:pointer; padding:6px 12px; border:1px solid var(--vscode-button-border,transparent); border-radius:4px; color:var(--vscode-button-foreground); background:var(--vscode-button-background); font:inherit; }
+button:hover { background:var(--vscode-button-hoverBackground); }
+button:disabled { cursor:not-allowed; opacity:.6; }
+button.secondary { background:var(--vscode-button-secondaryBackground); color:var(--vscode-button-secondaryForeground); }
+button.secondary:hover { background:var(--vscode-button-secondaryHoverBackground); }
+button.board-name { border:0; padding:0; background:transparent; color:var(--vscode-editor-foreground); font-weight:600; text-align:left; }
+button.board-name:hover { background:transparent; text-decoration:underline; }
+section { border:1px solid var(--vscode-panel-border); margin:18px 0; padding:16px; border-radius:6px; }
+.heading { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:12px; }
+button.refresh { padding:3px 8px; font-size:20px; line-height:1; }
+.board { display:flex; align-items:center; justify-content:space-between; padding:10px; border:1px solid var(--vscode-panel-border); border-radius:5px; margin:7px 0; gap:12px; }
+.board .info { display:flex; flex-direction:column; gap:4px; min-width:0; word-break:break-all; }
+.board.active { border-color:var(--vscode-focusBorder); }
+.board-actions { display:flex; gap:8px; flex-shrink:0; }
+h3 { font-size:13px; margin:14px 0 6px; }
+form { display:grid; gap:10px; margin-top:10px; }
+.fields { display:grid; grid-template-columns:minmax(100px,2fr) minmax(100px,1fr) minmax(70px,90px); gap:8px; }
+label { display:grid; gap:4px; }
+input { min-width:0; box-sizing:border-box; width:100%; padding:7px; color:var(--vscode-input-foreground); background:var(--vscode-input-background); border:1px solid var(--vscode-input-border,var(--vscode-panel-border)); border-radius:3px; font:inherit; }
+input:focus { outline:1px solid var(--vscode-focusBorder); }
+details { margin-top:10px; }
+summary { cursor:pointer; padding:7px 0; }
+.jump { border:1px solid var(--vscode-panel-border); padding:12px; margin:8px 0; border-radius:5px; }
+.error { color:var(--vscode-errorForeground); }
+.status { padding:5px 0; }
+#notice { min-height:20px; margin-top:12px; }
+#notice:empty { display:none; }
+@media(max-width:700px) { body {padding:12px} .fields {grid-template-columns:1fr} .board {align-items:flex-start;flex-direction:column;} }
+</style>
+</head>
+<body>
+<div class="controls"><button id="cancel" class="secondary" hidden>取消连接</button></div>
+<div id="notice" role="status" aria-live="polite"></div>
+<div id="providers"></div>
+<div id="manual"></div>
+<script nonce="__NONCE__">
+const vscode = acquireVsCodeApi();
+let state = { providers:[], managed:[], busy:false };
+const root = document.getElementById('providers');
+const notice = document.getElementById('notice');
+const sections = new Map();
+const el = (tag, className, text) => { const node=document.createElement(tag); if(className)node.className=className; if(text!==undefined)node.textContent=text; return node; };
+const send = message => vscode.postMessage(message);
+function button(text, action, cls='secondary', disabled=false) {
+ const node=el('button',cls,text); node.disabled=disabled;
+ node.addEventListener('click',action); return node;
+}
+function field(title, value, type='text') {
+ const label=el('label'); label.append(el('span','',title));
+ const input=el('input'); input.type=type; input.value=String(value); label.append(input); return {label,input};
+}
+function renderStatic(section) {
+ const details=el('details');
+ details.append(el('summary','','添加开发板'));
+ const form=el('form'); form.autocomplete='off';
+ const base=el('div','fields');
+ const host=field('板端 Host','192.168.2.62');
+ const user=field('User','root');
+ const port=field('Port',22,'number');
+ base.append(host.label,user.label,port.label); form.append(base);
+ const jumps=el('details');
+ jumps.append(el('summary','','JumpServer（可选）'));
+ const rows=el('div'); jumps.append(rows);
+ function addJump() {
+  const wrap=el('div','jump'), fields=el('div','fields');
+  const host=field('跳板 Host','');
+  const user=field('User','root');
+  const port=field('Port',22,'number');
+  const password=field('Password','123456','password');
+  fields.append(host.label,user.label,port.label); wrap.append(fields,password.label);
+  wrap.append(button('移除',()=>wrap.remove(),'secondary'));
+  wrap._values={host:host.input,user:user.input,port:port.input,password:password.input};
+  rows.append(wrap);
+ }
+ jumps.append(button('添加',addJump,'secondary'));
+ form.append(jumps);
+ const submit=button('添加并连接',event=>{
+  event.preventDefault();
+  const board={host:host.input.value,username:user.input.value,port:port.input.value,
+   jumps:[...rows.children].map(row=>({host:row._values.host.value,username:row._values.user.value,port:row._values.port.value,password:row._values.password.value}))};
+  send({type:'addStatic',board});
+ },'',state.busy);
+ form.append(submit);
+ form.addEventListener('submit',event=>event.preventDefault());
+ details.append(form); section.append(details);
+ return submit;
+}
+function renderLogin(section,provider) {
+ const form=el('form');form.autocomplete='off';
+ const user=field('Username',''),password=field('Password','','password');
+ user.input.maxLength=256;password.input.maxLength=4096;
+ form.append(user.label,password.label);
+ const controls=el('div','controls');
+ controls.append(button('登录并继续',event=>{
+  event.preventDefault(); if(!user.input.value.trim()||!password.input.value){ notice.textContent='用户名和密码不能为空';return; }
+  send({type:'credentials',providerId:provider.id,username:user.input.value,password:password.input.value});
+  password.input.value=''; form.querySelectorAll('button').forEach(b=>b.disabled=true);
+ },''));
+ form.append(controls); form.addEventListener('submit',event=>event.preventDefault());section.append(form);
+}
+function renderBoard(parent,board,managed) {
+ const row=el('div','board'+(board.id===state.currentBoard?' active':''));
+ const info=el('div','info');
+ info.append(button(board.name,()=>managed ?
+  send({type:'connect',boardId:board.id}) :
+  send({type:'reserve',providerId:board.providerId,boardId:board.id}),
+  'board-name',state.busy||(managed&&!board.available)));
+ const hint=managed ?
+    (board.id===state.currentBoard?'✓ 当前 Chat 已连接 · ':board.available?'已添加 · ':'不可连接 · ')+(board.sessions+' 个 SSH 会话') :
+    '可预约';
+ info.append(el('small','',hint));
+ if(board.error)info.append(el('span','error',board.error));
+ row.append(info);
+ const actions=el('div','board-actions');
+ if(managed) {
+  if(board.available&&board.id!==state.currentBoard) actions.append(button('连接',()=>send({type:'connect',boardId:board.id}),'secondary',state.busy));
+  actions.append(button(board.providerId==='static'?'删除':'释放',()=>send({type:'release',boardId:board.id}),'secondary',state.busy));
+ } else actions.append(button('预约并连接',()=>send({type:'reserve',providerId:board.providerId,boardId:board.id}),'',state.busy));
+ row.append(actions);parent.append(row);
+}
+function renderBoards(view,provider) {
+ const managed=state.managed.filter(board=>board.providerId===provider.id);
+ // Polling should not replace focused board controls when their displayed values are unchanged.
+ const snapshot=JSON.stringify([provider.authenticated,provider.status,state.busy,state.currentBoard,
+  managed,provider.available]);
+ if(view.snapshot===snapshot)return;
+ view.snapshot=snapshot;
+ const section=view.boards;section.replaceChildren();
+ if(!provider.authenticated)return;
+ if(managed.length) {
+  section.append(el('h3','',provider.id==='static'?'已添加开发板':'已预约'));
+  for(const board of managed)renderBoard(section,board,true);
+ }
+ if(provider.available.length) {
+  section.append(el('h3','','可预约开发板'));
+  for(const board of provider.available) {
+   if(board.reservedManagedId&&managed.some(item=>item.id===board.reservedManagedId))continue;
+   renderBoard(section,{...board,providerId:provider.id},false);
+  }
+ }
+ if(provider.id!=='static'&&provider.status==='ready'&&!provider.available.length&&!managed.length)section.append(el('p','muted','暂无可预约板卡'));
+}
+function render() {
+ document.getElementById('cancel').hidden=!state.busy;
+ for(const provider of state.providers) {
+  let view=sections.get(provider.id);
+  if(!view) {
+   const boards=el('div');
+   if(provider.id==='static') {
+    const manual=document.getElementById('manual');manual.append(boards);
+    view={boards,submit:renderStatic(manual)};
+   } else {
+    const section=el('section'),heading=el('div','heading');
+    const refresh=button('↻',()=>send({type:'refreshAvailable',providerId:provider.id}),'secondary refresh');
+    refresh.title='刷新可预约开发板';
+    refresh.setAttribute('aria-label',refresh.title);
+    const login=el('div'),error=el('p','error');
+    heading.append(el('h2','',provider.displayName),refresh);
+    section.append(heading,login,error,boards);root.append(section);
+    view={boards,refresh,login,error};
+   }
+   sections.set(provider.id,view);
+  }
+  if(provider.id==='static') {
+   view.submit.disabled=state.busy;
+  } else {
+   view.refresh.disabled=!provider.authenticated;
+   // Keep form nodes in place so background updates preserve input, focus and expanded jumps.
+   if(!provider.authenticated&&provider.status!=='pending') {
+    if(!view.login.firstChild)renderLogin(view.login,provider);
+    view.login.querySelectorAll('button').forEach(button=>button.disabled=provider.status==='loading');
+   } else view.login.replaceChildren();
+   view.error.textContent=provider.error||'';view.error.hidden=!provider.error;
+  }
+  renderBoards(view,provider);
+ }
+}
+document.getElementById('cancel').addEventListener('click',()=>send({type:'cancel'}));
+window.addEventListener('message',event=>{
+ const message=event.data;
+ if(!message||typeof message!=='object')return;
+ if(message.type==='state'){state=message;render();}
+ if(message.type==='error'){notice.textContent=message.message;}
+});
+send({type:'ready'});
+</script>
+</body></html>

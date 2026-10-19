@@ -30,4 +30,5 @@ await run({
 		filter: source => !path.relative(dependencies, source).split(path.sep).some(part =>
 			['@types', '.bin', 'test', 'tests', 'fixtures', 'examples', '.package-lock.json'].includes(part)),
 	});
+	await cp(path.join(srcDir, 'boardManagementUi.html'), path.join(outputDirectory, 'boardManagementUi.html'));
 });

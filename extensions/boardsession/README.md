@@ -1,18 +1,19 @@
 # BoardSession 与 Copilot Chat
 
-本扩展将 Copilot Chat 的终端操作切换到 `@carizon/board-session` 提供的持久板端 SSH 会话。核心包的 `BoardManager` 管理多块板、租期和相互独立的 SSH 会话；`BoardSession` 负责单会话的 X.509、wolfSSH、PTY、输入输出以及任意 0～N 台跳板。扩展负责参数采集、Hover、通知和 Chat 工具适配。同一块板可以由多个 Chat 使用，每个 Chat 都有独立的 SSH shell。
+本扩展将 Copilot Chat 的终端操作切换到 `@carizon/board-session` 提供的持久板端 SSH 会话。核心包的 `BoardManager` 管理多块板、租期和相互独立的 SSH 会话；`BoardSession` 负责单会话的 X.509、wolfSSH、PTY、输入输出以及任意 0～N 台跳板。扩展负责管理面板、通知和 Chat 工具适配。同一块板可以由多个 Chat 使用，每个 Chat 都有独立的 SSH shell。
 
 ## 使用
 
-在 Chat 输入栏中点击语音转文字按钮旁的插头按钮。首次连接在 Chat 内逐项填写，按 Enter 或 Next 继续，按 Escape 或 Cancel 取消。输入仅用于扩展操作，不会发送给聊天模型或写入聊天记录；密码使用遮罩字段。隐藏 Chat 或切换 Chat 会清理当前输入流程。
+点击 Chat 输入栏中的开发板连接按钮，在**编辑区**打开“CarizonBoards”面板，面板与发起操作的 Chat 绑定，其他 Chat 的 SSH 独立。无需再在 Chat 输入框内逐项操作，也不会把登录、SSH 密码写进 Chat 记录。
 
-第一步仍选择 **Direct / Baton / JumpServer**；Direct 和 JumpServer 都映射到新的 static Provider，Baton 映射到 baton Provider。板卡管理统一由 npm 包的 BoardManager 完成。
+面板根据 `manager.getProviders()` 获取来源，打开时调用各 Provider 的 `manager.login(id)`。需要用户名密码时在对应分组内填写，调用 `manager.login(id, {username,password})`；未登录时不展示该 Provider 的板卡，也不阻塞其他来源或手动添加。没有登录/发现方法的 Provider 通过 Manager 的 no-op/空列表语义处理。标签页可见期间，每秒通过 `manager.listAvailableBoards(id)` 更新已登录来源的候选列表；多个面板共享同一轮查询，慢请求不会重叠。隐藏或关闭最后一个可见管理面板后停止轮询，重新显示时立即查询。当前包括 `static` 和 `baton`：
 
-- **Direct**：依次填写板端 host、user、port；host 和 user 留空时分别使用 `192.168.2.62` 和 `root`，port 留空时使用 `22`。板端 X.509 复合 PEM 由 `boardsession.identityFile` 设置提供，不在连接向导中询问；设置为空时使用核心 npm 包内的 `prebuilds/debug.key`。同一扩展 host 中的所有 Chat 共用该 identity。
-- **Baton**：先调用 Manager 验证当前内存中的 token；如需重新登录，在 Chat 内填写用户名和密码。登录后查询 Provider 的可预约板卡列表，再通过 Manager 添加板卡。预约、连接参数解析、续约及释放均由 npm 包负责。新版包的 token 只在 Provider 内存保存，不再支持旧版 SecretStorage 的跨宿主重启自动登录；密码不持久化。服务地址仍取自环境变量或 BenchOps 配置。
-- **JumpServer**：先填写板端 host、user、port（默认值同 Direct），再按连接顺序填写至少一个跳板的 **host → user → port → password**。第一个跳板 host 不能为空；之后的 host 留空即可结束。跳板 user、port、password 留空时分别使用 `root`、`22`、`123456`。所有手动端口必须为 1～65535 的整数。
+- **Baton**：登录后直接列出可预约板卡。点击候选板卡调用 `addBoard('baton',{boardId})` 预约并连接；点击已管理板卡名称则连接该板，仅单独的“释放”按钮触发释放确认。候选板与已预约记录按 Provider/候选 ID 关联，避免同名板卡混淆。Baton 认证 token 仅由 npm Provider 在内存中管理，扩展不持久化密码，重启后可能需要重新登录；HTTP API、预约、续约、释放逻辑都在包内。
+- **Static**：没有平台登录和可预约目录，在 Provider 分组下方提供“＋ 添加开发板”表单和已添加板卡，不显示独立的 Static 标题或同步状态。默认 host `192.168.2.62`、user `root`、port `22`；不需要跳板时无需展开。可展开 JumpServer 设置，按顺序添加 0～N 级跳板，每级填写 host/user/port/password，默认 user=`root`、port=`22`、password=`123456`。静态板使用 `addBoard('static', {board,jumps})` 登记，单独的“删除”按钮移除记录，不涉及 Baton 预约。
 
-所有选择控件都在 Chat 内，支持键盘与取消；板卡列表过长时可滚动。Baton 的 API、时长选项、HIL/container 预约语义和 SSH 映射只存在于核心 npm 包。
+每个 Chat 绑定一块板，不同 Chat 可以使用同一块板，各自拥有独立 SSH。添加成功后自动尝试在当前 Chat 建立 SSH；如果 SSH 失败，Manager 记录仍保留，用户可以再次连接或释放。点击当前已连接板保持连接；切换板卡先建立新 SSH，成功后关闭该 Chat 原来的连接，失败则保留旧连接。释放由 `manager.removeBoard(id)` 关闭该板的所有 SSH 会话；普通断开只关闭当前 Chat 的 `BoardSession`。
+
+连接期间可点击 Chat 连接按钮或面板中的“取消连接”。已开始的 SSH 建链会在返回后清理，结束前不能重复连接，已登记的板记录保留。后台状态更新会保留正在填写的登录、静态板和跳板表单。
 
 连接成功后插头显示激活色，Copilot 可使用：
 
@@ -23,13 +24,9 @@
 | `board_terminal_output` | 读取并消费未读输出 |
 | `board_terminal_kill` | 关闭板端 SSH 会话 |
 
-将鼠标停留在连接按钮上即可管理板子：Hover 顶部的 **添加开发板** 沿用上述 Direct、Baton 和 JumpServer 流程。点击板名连接对应板子；再次点击当前 Chat 已连接的板名会关闭该 Chat 的 SSH 并恢复本机工具。切换到另一块板时，扩展先建立新连接，成功后再关闭该 Chat 在旧板上的 SSH。普通断开和切板不会移除板记录或主动释放 Baton 预约。添加成功后自动连接；SSH 失败时已登记的板记录保留，可以重试或释放。√ 和加粗表示当前 Chat 已连接的板子；每块板的名称和 **释放** 操作显示在同一行。
+Baton 板卡生命周期由 `BoardManager` 在包内自动管理；扩展仅响应板卡可用状态变化。释放失败时 Manager 保留记录并提供重试机会。扩展关闭时尽力释放剩余资源，但宿主退出可能中断异步操作。
 
-**释放** 对所有板都可用：确认后关闭该板的全部 SSH 会话，再调用资源的释放回调（Baton 板会释放预约），成功后删除记录。释放失败时记录会保留，供用户重试；释放中的资源不可新建连接。
-
-Baton 预约由 BoardManager 自动管理；默认在到期前约 10 分钟开始续约，由 Provider 决定续约时长。默认空闲 10 分钟后，仅带有释放能力的资源自动回收；Static 板卡不会自动释放。过期、释放失败和续约失败会反映到通知和 Hover；扩展关闭时尽力释放剩余管理资源，但宿主退出可能中断异步操作。重启后内存板卡记录不会恢复。
-
-连接意外断开、`board_terminal_kill` 关闭会话、资源释放或过期后，当前 Chat 仍保持板端模式，本机终端工具继续被禁用，避免操作静默落回本机。可通过连接按钮重新连接；需要恢复本机工具时，显式执行 `boardsession.deactivate`。连接仍正常时，也可在 Hover 中点击当前板名断开并恢复本机工具。取消正在执行的板端工具会关闭该 Chat 捕获的 SSH 会话；取消连接流程时，已开始的 SSH 建链会在返回后关闭，当前建链结束前不能重试。
+板端 SSH 意外断开、Tool Kill、释放或到期后，当前 Chat **仍保持板端工具隔离模式**，不会自动启用本机终端。`boardsession.deactivate` 命令仍可显式恢复本机工具，管理面板不再提供切回本机按钮。工具调用取消会关闭对应的 SSH，而不影响其他 Chat 对同一板的会话。
 
 板端模式和工具开关按 Chat 会话分别维护，不是整个 VS Code 窗口共享的状态。板端模式下启用 `board_terminal_*`，并禁用 `run_in_terminal`、`send_to_terminal`、`get_terminal_output`、`kill_terminal`、`terminal_selection`、`terminal_last_command` 和 `vscode_get_terminal_confirmation`。工具服务会在准备和执行前检查会话状态，包括等待用户确认期间发生的模式切换。仅禁用某个扩展工具不会解除本机终端工具的限制。
 
@@ -54,8 +51,8 @@ make command="npm --prefix extensions/boardsession run compile"
 
 ## 工程接入范围
 
-- `chat/input/actions` 将 Chat 输入栏 action menu 暴露给扩展；action context 只携带会话 URI。
-- `_workbench.chat.showInput` / `showPick` / `closeInput` 提供 Chat 内的临时输入控件；切换会话、隐藏 Chat 或取消时会清理控件。
-- `_workbench.chat.registerActionHover(actionId, providerCommand, allowedCommands)` / `unregisterActionHover(actionId, providerCommand)` 提供通用动态 Hover。provider 接收 `{ sessionResource }` 并返回 Markdown 内容；主框架只信任注册时允许的命令，不启用 HTML。
-- Chat 工具服务提供会话级工具开关和执行前检查；BoardSession 的工具 ID、连接状态及本机终端屏蔽策略均由扩展管理，不在通用工具服务中写入板端业务规则。
-- 工程构建只增加扩展编译入口、依赖目录和 native 扩展收集配置；核心包作为私有 registry 上的普通依赖安装。
+- `chat/input/actions` 只提供带 Chat Session URI 的连接按钮入口；VSCode 主框架保留每个 Chat 的状态和 Tool Call 执行前隔离检查。
+- `BoardManagementUi` 在编辑区提供受 CSP 限制的 Webview 页面，只通过扩展宿主消息调用 `BoardConnection`；面板表单、认证数据不会进入 Chat History。HTML 在 npm 扩展构建时复制到 `dist/`。
+- `BoardConnection` 负责 Chat 到 SSH Session 的绑定及本机/板端工具切换；npm `BoardManager` 负责 Provider 注册、候选板发现、添加/预约、续约、释放。
+- 原 Chat 内逐项输入控件已移除。完整编译和端到端测试时可以参考 `coder/test/env.md` 和 `coder/test/board/README.md` 的模拟 Baton 与 GCP PKIX-SSH 测试环境。
+- 本机 `local` 仍使用相邻 `board/` 的 npm tarball；公司私有源的依赖方式保持在其他分支中，不能把本地 `file:` 路径合入公司分支。
