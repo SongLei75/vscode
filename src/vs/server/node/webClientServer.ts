@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { createReadStream, promises } from 'fs';
+import { createReadStream, promises, readFileSync, writeFileSync } from 'fs';
 import type * as http from 'http';
 import * as cookie from 'cookie';
 import * as crypto from 'crypto';
@@ -113,6 +113,10 @@ const APP_ROOT = dirname(FileAccess.asFileUri('').fsPath);
 const STATIC_PATH = `/static`;
 const CALLBACK_PATH = `/callback`;
 const WEB_EXTENSION_PATH = `/web-extension-resource`;
+const SECRET_KEY_MINT_PATH = '/_vscode-server/mint-key';
+const SECRET_KEY_PATH_COOKIE_NAME = 'vscode-secret-key-path';
+const SECRET_KEY_CLIENT_COOKIE_NAME = 'vscode-cli-secret-half';
+const SECRET_KEY_BYTES = 32;
 const webWorkerExtensionHostIframeScriptSHA = 'sha256-daEgfo2VIXpx2Np71KqCCbkeQwv+68vPrx54XRcbdcs=';
 
 /**
@@ -160,6 +164,7 @@ export function createWorkbenchContentSecurityPolicy(scriptNonce: string, nlsBas
 export class WebClientServer {
 
 	private readonly _webExtensionResourceUrlTemplate: URI | undefined;
+	private readonly _serverSecretKey: Buffer;
 
 	constructor(
 		private readonly _connectionToken: ServerConnectionToken,
@@ -172,6 +177,7 @@ export class WebClientServer {
 		@ICSSDevelopmentService private readonly _cssDevService: ICSSDevelopmentService
 	) {
 		this._webExtensionResourceUrlTemplate = this._productService.extensionsGallery?.resourceUrlTemplate ? URI.parse(this._productService.extensionsGallery.resourceUrlTemplate) : undefined;
+		this._serverSecretKey = this._loadOrCreateServerSecretKey();
 	}
 
 	/**
@@ -198,6 +204,9 @@ export class WebClientServer {
 				return this._handleWebExtensionResource(req, res, pathname.substring(WEB_EXTENSION_PATH.length));
 			}
 
+			if (pathname === SECRET_KEY_MINT_PATH) {
+				return this._handleSecretMint(req, res);
+			}
 			return serveError(req, res, 404, 'Not found.');
 		} catch (error) {
 			this._logService.error(error);
@@ -309,21 +318,21 @@ export class WebClientServer {
 		// Prefix routes with basePath for clients
 		const forwardedPrefix = getFirstHeader('x-forwarded-prefix');
 		const basePath = forwardedPrefix && isSafeBasePath(forwardedPrefix) ? forwardedPrefix : this._basePath;
+		const cookies = cookie.parse(req.headers.cookie || '');
+		const clientKeyHalf = this._getOrCreateClientKeyHalf(cookies);
+		const mintPath = posix.join(basePath, this._productPath, SECRET_KEY_MINT_PATH);
 
 		const queryConnectionTokens = parsedUrl.searchParams.getAll(connectionTokenQueryName);
 		if (queryConnectionTokens.length === 1) {
 			const queryConnectionToken = queryConnectionTokens[0];
 			// We got a connection token as a query parameter.
 			// We want to have a clean URL, so we strip it
-			const responseHeaders: Record<string, string> = Object.create(null);
-			responseHeaders['Set-Cookie'] = cookie.serialize(
-				connectionTokenCookieName,
-				queryConnectionToken,
-				{
-					sameSite: 'lax',
-					maxAge: 60 * 60 * 24 * 7 /* 1 week */
-				}
-			);
+			const responseHeaders: http.OutgoingHttpHeaders = {
+				'Set-Cookie': [
+					cookie.serialize(connectionTokenCookieName, queryConnectionToken, { sameSite: 'lax', maxAge: 60 * 60 * 24 * 7 }),
+					...this._buildSecretCookieHeaders(clientKeyHalf, mintPath)
+				]
+			};
 
 			const newQuery = new URLSearchParams(parsedUrl.searchParams);
 			newQuery.delete(connectionTokenQueryName);
@@ -427,7 +436,6 @@ export class WebClientServer {
 			callbackRoute: callbackRoute
 		};
 
-		const cookies = cookie.parse(req.headers.cookie || '');
 		const locale = cookies['vscode.nls.locale'] || req.headers['accept-language']?.split(',')[0]?.toLowerCase() || 'en';
 		let WORKBENCH_NLS_BASE_URL: string | undefined;
 		let WORKBENCH_NLS_URL: string;
@@ -482,24 +490,56 @@ export class WebClientServer {
 			'Content-Type': 'text/html',
 			'Content-Security-Policy': cspDirectives
 		};
+		const setCookies = this._buildSecretCookieHeaders(clientKeyHalf, mintPath);
 		if (this._connectionToken.type !== ServerConnectionTokenType.None) {
 			// At this point we know the client has a valid cookie
 			// and we want to set it prolong it to ensure that this
 			// client is valid for another 1 week at least
-			headers['Set-Cookie'] = cookie.serialize(
+			setCookies.unshift(cookie.serialize(
 				connectionTokenCookieName,
 				this._connectionToken.value,
-				{
-					sameSite: 'lax',
-					maxAge: 60 * 60 * 24 * 7 /* 1 week */
-				}
-			);
+				{ sameSite: 'lax', maxAge: 60 * 60 * 24 * 7 }
+			));
 		}
+		headers['Set-Cookie'] = setCookies;
 
 		res.writeHead(200, headers);
 		return void res.end(data);
 	}
 
+	/** Keep the server half stable between Server restarts, scoped to its user-data directory. */
+	private _loadOrCreateServerSecretKey(): Buffer {
+		const keyPath = join(this._environmentService.userDataPath, 'serve-web-key-half');
+		try {
+			const key = Buffer.from(readFileSync(keyPath, 'utf8').trim(), 'base64url');
+			if (key.length === SECRET_KEY_BYTES) { return key; }
+		} catch { /* No previous key. */ }
+		const key = crypto.randomBytes(SECRET_KEY_BYTES);
+		writeFileSync(keyPath, key.toString('base64url'), { mode: 0o600 });
+		return key;
+	}
+
+	private _getOrCreateClientKeyHalf(cookies: Record<string, string>): Buffer {
+		const raw = Buffer.from(cookies[SECRET_KEY_CLIENT_COOKIE_NAME] ?? '', 'base64url');
+		return raw.length === SECRET_KEY_BYTES ? raw : crypto.randomBytes(SECRET_KEY_BYTES);
+	}
+
+	private _handleSecretMint(req: http.IncomingMessage, res: http.ServerResponse): void {
+		if (req.method !== 'POST') { res.writeHead(405); res.end(); return; }
+		const cookies = cookie.parse(req.headers.cookie || '');
+		const keyHalf = Buffer.from(cookies[SECRET_KEY_CLIENT_COOKIE_NAME] ?? '', 'base64url');
+		if (keyHalf.length !== SECRET_KEY_BYTES) { res.writeHead(400); res.end(); return; }
+		const serverPart = crypto.createHash('sha256').update(this._serverSecretKey).update(keyHalf).digest();
+		res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Cache-Control': 'no-store' });
+		res.end(serverPart);
+	}
+
+	private _buildSecretCookieHeaders(keyHalf: Buffer, mintPath: string): string[] {
+		return [
+			`${SECRET_KEY_PATH_COOKIE_NAME}=${mintPath}; SameSite=Strict; Path=/`,
+			`${SECRET_KEY_CLIENT_COOKIE_NAME}=${keyHalf.toString('base64url')}; SameSite=Strict; HttpOnly; Max-Age=2592000; Path=/`
+		];
+	}
 	private _getScriptCspHashes(content: string): string[] {
 		// Compute the CSP hashes for line scripts. Uses regex
 		// which means it isn't 100% good.

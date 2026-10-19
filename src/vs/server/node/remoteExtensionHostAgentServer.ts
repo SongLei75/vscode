@@ -113,11 +113,6 @@ class RemoteExtensionHostAgentServer extends Disposable implements IServerAPI {
 	}
 
 	public async handleRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
-		// Only serve GET requests
-		if (req.method !== 'GET') {
-			return serveError(req, res, 405, `Unsupported method ${req.method}`);
-		}
-
 		if (!req.url) {
 			return serveError(req, res, 400, `Bad request.`);
 		}
@@ -139,6 +134,11 @@ class RemoteExtensionHostAgentServer extends Disposable implements IServerAPI {
 		// for now accept all paths, with or without server product path
 		if (pathname.startsWith(this._serverProductPath) && pathname.charCodeAt(this._serverProductPath.length) === CharCode.Slash) {
 			pathname = pathname.substring(this._serverProductPath.length);
+		}
+
+		// Web secret-key minting is the only POST route; all other endpoints remain GET-only.
+		if (req.method !== 'GET' && !(req.method === 'POST' && pathname === '/_vscode-server/mint-key' && !!this._webClientServer)) {
+			return serveError(req, res, 405, `Unsupported method ${req.method}`);
 		}
 
 		// Version
