@@ -8,6 +8,7 @@ import { BoardSession } from '@carizon/board-session';
 import { BoardConnection } from './boardConnection.js';
 import { BoardManagementUi } from './boardManagementUi.js';
 import { registerBoardTerminalTools } from './boardTerminalTools.js';
+import { registerBoardFileTools } from './boardFileTools.js';
 
 /** Attaches the independent BoardSession package to Chat. */
 export async function activate(context: vscode.ExtensionContext) {
@@ -22,5 +23,6 @@ export async function activate(context: vscode.ExtensionContext) {
 		vscode.commands.registerCommand('boardsession.cancel', (context?: { sessionResource?: string }) => connection.cancel(context?.sessionResource)),
 	);
 	registerBoardTerminalTools(context, connection);
+	registerBoardFileTools(context, connection);
 	return { BoardSession };
 }

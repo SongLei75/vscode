@@ -185,6 +185,68 @@
           "required": [],
           "additionalProperties": false
         }
+      },
+      {
+        "icon": "$(files)",
+        "tags": [
+          "file",
+          "transfer"
+        ],
+        "name": "board_file_upload",
+        "toolReferenceName": "board_file_upload",
+        "canBeReferencedInPrompt": true,
+        "displayName": "%board_file_upload.displayName%",
+        "userDescription": "%board_file_upload.userDescription%",
+        "modelDescription": "Upload a local file or recursive directory to the connected remote board via SCP. The local path is on the VS Code workspace extension host, not the board; local relative paths use the host process working directory. Remote relative paths use a fresh SSH login directory, not the persistent shell's cwd. Confirm destination before copying; existing files may be overwritten. Does not execute a shell command or interrupt the persistent terminal.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "localPath": {
+              "type": "string",
+              "description": "Local filesystem path in the VS Code workspace extension host; relative paths use the extension host process working directory"
+            },
+            "remotePath": {
+              "type": "string",
+              "description": "File or directory path on the connected remote board; relative paths use a fresh SSH session's default directory"
+            }
+          },
+          "required": [
+            "localPath",
+            "remotePath"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "icon": "$(files)",
+        "tags": [
+          "file",
+          "transfer"
+        ],
+        "name": "board_file_download",
+        "toolReferenceName": "board_file_download",
+        "canBeReferencedInPrompt": true,
+        "displayName": "%board_file_download.displayName%",
+        "userDescription": "%board_file_download.userDescription%",
+        "modelDescription": "Download a remote file or recursive directory to the local VS Code workspace extension host via SCP. Local relative paths use the extension host process working directory. Remote relative paths use a fresh SSH login directory, not the persistent shell's cwd. Confirm destination before copying; existing files may be overwritten. Does not execute a shell command or interrupt the persistent terminal.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "localPath": {
+              "type": "string",
+              "description": "Local filesystem path in the VS Code workspace extension host; relative paths use the extension host process working directory"
+            },
+            "remotePath": {
+              "type": "string",
+              "description": "File or directory path on the connected remote board; relative paths use a fresh SSH session's default directory"
+            }
+          },
+          "required": [
+            "localPath",
+            "remotePath"
+          ],
+          "additionalProperties": false
+        }
       }
     ],
     "configuration": {

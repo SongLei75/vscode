@@ -11,5 +11,9 @@
   "board_terminal_output.userDescription": "Read Board Terminal Output on the connected remote board",
   "board_terminal_kill.displayName": "Close Board Terminal",
   "board_terminal_kill.userDescription": "Close Board Terminal on the connected remote board",
-  "command.disconnected": "Board Disconnected: Deactivate Board Mode"
+  "command.disconnected": "Board Disconnected: Deactivate Board Mode",
+  "board_file_upload.displayName": "Upload Files to Board",
+  "board_file_upload.userDescription": "Upload a local file or directory to the connected board",
+  "board_file_download.displayName": "Download Files from Board",
+  "board_file_download.userDescription": "Download a board file or directory to the local computer"
 }
