@@ -17,7 +17,7 @@ interface ChatOperation {
 	cancelled: boolean;
 }
 
-const boardTools = ['board_terminal_run', 'board_terminal_send', 'board_terminal_output', 'board_terminal_kill'];
+const boardTools = ['board_terminal_run', 'board_terminal_send', 'board_terminal_output', 'board_terminal_kill', 'board_file_upload', 'board_file_download'];
 const localTerminalTools = ['run_in_terminal', 'send_to_terminal', 'get_terminal_output', 'kill_terminal', 'terminal_selection', 'terminal_last_command', 'vscode_get_terminal_confirmation'];
 
 /** Owns chat bindings and host interactions. The npm Manager owns resources and their lifecycle. */
@@ -186,8 +186,8 @@ export class BoardConnection implements vscode.Disposable {
 		});
 	}
 
-	/** Cancel only this call's captured SSH, including when its chat switches during execution. */
-	async invoke<T>(resource: vscode.Uri | undefined, operation: (session: BoardSession) => T | Promise<T>, token: vscode.CancellationToken): Promise<T> {
+	/** Invoke the captured session; transfers can cancel independently of the persistent shell. */
+	async invoke<T>(resource: vscode.Uri | undefined, operation: (session: BoardSession) => T | Promise<T>, token: vscode.CancellationToken, onCancel?: () => void): Promise<T> {
 		const key = this.chatKey(resource);
 		if (token.isCancellationRequested) { throw new vscode.CancellationError(); }
 		const binding = this.bindings.get(key);
@@ -196,6 +196,7 @@ export class BoardConnection implements vscode.Disposable {
 			throw new Error(vscode.l10n.t("Board disconnected or released. Reconnect from this chat; no command was sent locally."));
 		}
 		const listener = token.onCancellationRequested(() => {
+			if (onCancel) { onCancel(); return; }
 			void binding.session.close().finally(async () => {
 				await this.publishState(key);
 			}).catch(error => console.error('Board cancellation failed', error));

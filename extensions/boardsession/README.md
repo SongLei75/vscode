@@ -23,12 +23,16 @@
 | `board_terminal_send` | 向同一板端 shell 发送输入，默认追加换行 |
 | `board_terminal_output` | 读取并消费未读输出 |
 | `board_terminal_kill` | 关闭板端 SSH 会话 |
+| `board_file_upload` | 通过独立 SCP 连接上传本地文件或递归目录至板端 |
+| `board_file_download` | 通过独立 SCP 连接将板端文件或递归目录下载到本地 |
+
+文件复制工具使用 `BoardSession.upload(localPath, remotePath, signal?)` / `download(remotePath, localPath, signal?)`。本地路径属于 VS Code workspace extension host 文件系统；相对本地路径基于该进程的工作目录，而不是当前工作区。远端相对路径基于新 SSH 连接的登录目录，而不是板端持久 Shell 的当前目录。两个工具均提供复制路径的用户确认；取消仅中止对应 SCP 传输，不断开已连接的持久 Shell。失败时目标可能留下部分数据。
 
 Baton 板卡生命周期由 `BoardManager` 在包内自动管理；扩展仅响应板卡可用状态变化。释放失败时 Manager 保留记录并提供重试机会。扩展关闭时尽力释放剩余资源，但宿主退出可能中断异步操作。
 
-板端 SSH 意外断开、Tool Kill、释放或到期后，当前 Chat **仍保持板端工具隔离模式**，不会自动启用本机终端。`boardsession.deactivate` 命令仍可显式恢复本机工具，管理面板不再提供切回本机按钮。工具调用取消会关闭对应的 SSH，而不影响其他 Chat 对同一板的会话。
+板端 SSH 意外断开、Tool Kill、释放或到期后，当前 Chat **仍保持板端工具隔离模式**，不会自动启用本机终端。`boardsession.deactivate` 命令仍可显式恢复本机工具，管理面板不再提供切回本机按钮。终端工具调用取消会关闭对应的 SSH，而不影响其他 Chat 对同一板的会话；文件复制工具取消只关闭单独的 SCP 连接。
 
-板端模式和工具开关按 Chat 会话分别维护，不是整个 VS Code 窗口共享的状态。板端模式下启用 `board_terminal_*`，并禁用 `run_in_terminal`、`send_to_terminal`、`get_terminal_output`、`kill_terminal`、`terminal_selection`、`terminal_last_command` 和 `vscode_get_terminal_confirmation`。工具服务会在准备和执行前检查会话状态，包括等待用户确认期间发生的模式切换。仅禁用某个扩展工具不会解除本机终端工具的限制。
+板端模式和工具开关按 Chat 会话分别维护，不是整个 VS Code 窗口共享的状态。板端模式下启用 `board_terminal_*` 和 `board_file_*`，并禁用 `run_in_terminal`、`send_to_terminal`、`get_terminal_output`、`kill_terminal`、`terminal_selection`、`terminal_last_command` 和 `vscode_get_terminal_confirmation`。工具服务会在准备和执行前检查会话状态，包括等待用户确认期间发生的模式切换。仅禁用某个扩展工具不会解除本机终端工具的限制。
 
 ## 平台与身份配置
 
@@ -55,4 +59,3 @@ make command="npm --prefix extensions/boardsession run compile"
 - `BoardManagementUi` 在编辑区提供受 CSP 限制的 Webview 页面，只通过扩展宿主消息调用 `BoardConnection`；面板表单、认证数据不会进入 Chat History。HTML 在 npm 扩展构建时复制到 `dist/`。
 - `BoardConnection` 负责 Chat 到 SSH Session 的绑定及本机/板端工具切换；npm `BoardManager` 负责 Provider 注册、候选板发现、添加/预约、续约、释放。
 - 原 Chat 内逐项输入控件已移除。完整编译和端到端测试时可以参考 `coder/test/env.md` 和 `coder/test/board/README.md` 的模拟 Baton 与 GCP PKIX-SSH 测试环境。
-- 本机 `local` 仍使用相邻 `board/` 的 npm tarball；公司私有源的依赖方式保持在其他分支中，不能把本地 `file:` 路径合入公司分支。
