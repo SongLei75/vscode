@@ -55,4 +55,3 @@ make command="npm --prefix extensions/boardsession run compile"
 - `BoardManagementUi` 在编辑区提供受 CSP 限制的 Webview 页面，只通过扩展宿主消息调用 `BoardConnection`；面板表单、认证数据不会进入 Chat History。HTML 在 npm 扩展构建时复制到 `dist/`。
 - `BoardConnection` 负责 Chat 到 SSH Session 的绑定及本机/板端工具切换；npm `BoardManager` 负责 Provider 注册、候选板发现、添加/预约、续约、释放。
 - 原 Chat 内逐项输入控件已移除。完整编译和端到端测试时可以参考 `coder/test/env.md` 和 `coder/test/board/README.md` 的模拟 Baton 与 GCP PKIX-SSH 测试环境。
-- 本机 `local` 仍使用相邻 `board/` 的 npm tarball；公司私有源的依赖方式保持在其他分支中，不能把本地 `file:` 路径合入公司分支。
