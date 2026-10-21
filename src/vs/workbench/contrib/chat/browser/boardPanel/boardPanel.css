@@ -1,0 +1,34 @@
+/* BoardSession native editor, scoped to avoid modifying other workbench views. */
+.carizon-board-panel { height:100%; overflow:auto; container-type:inline-size; container-name:carizon-board-panel; color:var(--vscode-editor-foreground); background:var(--vscode-editor-background); }
+.carizon-board-panel .content { margin:0; padding:24px; background:var(--vscode-editor-background); color:var(--vscode-editor-foreground); font-family:var(--vscode-font-family); font-size:13px; }
+.carizon-board-panel h2 { font-size:16px; margin:0; }
+.carizon-board-panel small, .carizon-board-panel .muted { color:var(--vscode-descriptionForeground); }
+.carizon-board-panel .controls { display:flex; gap:8px; flex-wrap:wrap; }
+.carizon-board-panel button { cursor:pointer; padding:6px 12px; border:1px solid var(--vscode-button-border,transparent); border-radius:4px; color:var(--vscode-button-foreground); background:var(--vscode-button-background); font:inherit; }
+.carizon-board-panel button:hover { background:var(--vscode-button-hoverBackground); }
+.carizon-board-panel button:disabled { cursor:not-allowed; opacity:.6; }
+.carizon-board-panel button.secondary { background:var(--vscode-button-secondaryBackground); color:var(--vscode-button-secondaryForeground); }
+.carizon-board-panel button.secondary:hover { background:var(--vscode-button-secondaryHoverBackground); }
+.carizon-board-panel button.board-name { border:0; padding:0; background:transparent; color:var(--vscode-editor-foreground); font-weight:600; text-align:left; }
+.carizon-board-panel button.board-name:hover { background:transparent; text-decoration:underline; }
+.carizon-board-panel section { border:1px solid var(--vscode-panel-border); margin:18px 0; padding:16px; border-radius:6px; }
+.carizon-board-panel .heading { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:12px; }
+.carizon-board-panel button.refresh { padding:3px 8px; font-size:20px; line-height:1; }
+.carizon-board-panel .board { display:flex; align-items:center; justify-content:space-between; padding:10px; border:1px solid var(--vscode-panel-border); border-radius:5px; margin:7px 0; gap:12px; }
+.carizon-board-panel .board .info { display:flex; flex-direction:column; gap:4px; min-width:0; word-break:break-all; }
+.carizon-board-panel .board.active { border-color:var(--vscode-focusBorder); }
+.carizon-board-panel .board-actions { display:flex; gap:8px; flex-shrink:0; }
+.carizon-board-panel h3 { font-size:13px; margin:14px 0 6px; }
+.carizon-board-panel form { display:grid; gap:10px; margin-top:10px; }
+.carizon-board-panel .fields { display:grid; grid-template-columns:minmax(100px,2fr) minmax(100px,1fr) minmax(70px,90px); gap:8px; }
+.carizon-board-panel label { display:grid; gap:4px; }
+.carizon-board-panel input { min-width:0; box-sizing:border-box; width:100%; padding:7px; color:var(--vscode-input-foreground); background:var(--vscode-input-background); border:1px solid var(--vscode-input-border,var(--vscode-panel-border)); border-radius:3px; font:inherit; }
+.carizon-board-panel input:focus { outline:1px solid var(--vscode-focusBorder); }
+.carizon-board-panel details { margin-top:10px; }
+.carizon-board-panel summary { cursor:pointer; padding:7px 0; }
+.carizon-board-panel .jump { border:1px solid var(--vscode-panel-border); padding:12px; margin:8px 0; border-radius:5px; }
+.carizon-board-panel .error { color:var(--vscode-errorForeground); }
+.carizon-board-panel .status { padding:5px 0; }
+.carizon-board-panel .notice { min-height:20px; margin-top:12px; }
+.carizon-board-panel .notice:empty { display:none; }
+@container carizon-board-panel (max-width:700px) { .carizon-board-panel .content {padding:12px} .carizon-board-panel .fields {grid-template-columns:1fr} .carizon-board-panel .board {align-items:flex-start;flex-direction:column;} }
